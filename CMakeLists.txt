@@ -124,8 +124,8 @@ add_custom_target(build_gas_shared
 		-Wl,--wrap=free
 		-Wl,--wrap=realloc
 		-Wl,--wrap=calloc
-		#-Wl,--wrap=bfd_elf_obj_attr_size
-		#-Wl,--wrap=bfd_set_symtab
+		-Wl,--wrap=bfd_elf_obj_attr_size
+		-Wl,--wrap=bfd_set_symtab
 		wrappers.o
 		gas/*.o
 		gas/config/*.o

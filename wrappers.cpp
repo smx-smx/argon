@@ -39,7 +39,7 @@ static std::unordered_set<void *> g_allocations;
 
 extern "C" {
 
-#if 0
+#if 1
 uintptr_t __wrap_bfd_elf_obj_attr_size (void *abfd){
 	return 0;
 }

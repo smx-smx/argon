@@ -68,6 +68,12 @@ static HMODULE gas;
 static void *gas;
 #endif
 
+struct relax_seg_info
+{
+  int pass;
+  int changed;
+};
+
 struct obstack          /* control current object in current chunk */
 {
   size_t chunk_size;     /* preferred size to allocate chunks in */
@@ -277,6 +283,13 @@ int assemble(const char *buffer){
 	GVAR(void **, now_subseg);
 	GVAR(void **, frag_now);
 
+	GVAR(void *, _bfd_std_section);
+	GVAR(void *, predefined_address_frag);
+
+	GFUNC(void *, local_symbol_make,
+		const char *name, void *section, void *frag, uintptr_t val);
+
+	GFUNC(void, subseg_change, void *seg, int subseg);
 
 	// reset globals
 	*now_seg = NULL;
@@ -289,6 +302,13 @@ int assemble(const char *buffer){
 	// initializes obstacks
 	read_begin();
 	expr_begin();
+
+	// we need this to initialize bfd_abs_section_ptr
+	void *bfd_abs_section_ptr = (void *)((uintptr_t)_bfd_std_section + (296 * 2));
+	subseg_change(bfd_abs_section_ptr, 0);
+
+	
+	//local_symbol_make(".gasversion", bfd_abs_section_ptr, predefined_address_frag, 0);
 
 	#define MEM_SIZE 1024 * 1024
 	unsigned char *mem = calloc(MEM_SIZE, 1);
@@ -324,13 +344,22 @@ int assemble(const char *buffer){
 	*text_section = subseg_new(".text", 0);
 	//bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8);
 	bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8 | 256);
-	subseg_set(*text_section, 0);
+
+	// read the current fragment chain
+	frchainS *_frchain_now = *frchain_now;
+	void *_frag_now = *frag_now;
+
+	//subseg_set(*text_section, 0);
 
 	/** required if using anything from write.c (which assumes they are initialized) */
 	GVAR(void **, reg_section);
 	GVAR(void **, expr_section);
 	*reg_section = subseg_new ("*GAS `reg' section*", 0);
   	*expr_section = subseg_new ("*GAS `expr' section*", 0);
+
+	// set frchain_now to the .text section
+	*frchain_now = _frchain_now;
+	*frag_now = _frag_now;
 
 	md_begin();
 	
@@ -348,10 +377,23 @@ int assemble(const char *buffer){
 
 	DPRINTF("%p %p %p\n", _frchain_now->frch_root, _frchain_now->frch_last, _frchain_now->frch_next);
 	DPUTS("--");
-	
-	// read the current fragment chain
-	frchainS *_frchain_now = *frchain_now;
 
+
+	struct relax_seg_info rsi = {
+		.pass = 0,
+	};
+
+	GFUNC(int, relax_segment, void *segment_frag_root, void *segment, int pass);
+	GFUNC(void, frag_wane, void *fragP);
+
+	GFUNC(long, i386_generic_table_relax_frag,
+		void *segment, void *fragP, long stretch
+	);
+	GFUNC(void, write_object_file);
+
+	write_object_file();
+
+#if 0
 	unsigned size = 0;
 	// dump and clear the current fragment chain
 	unsigned char *bytes = gc_frchain(_frchain_now, &size);
@@ -360,6 +402,7 @@ int assemble(const char *buffer){
 	}
 	puts("");
 	free(bytes);
+#endif
 
 	if(md_end != NULL) md_end();
 
