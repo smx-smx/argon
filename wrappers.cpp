@@ -188,9 +188,20 @@ size_t bfd_data_written(){
 	return ::bfd_data_count;
 }
 
+#define FAKE_OUTPUT_HANDLE (FILE *)(-2)
+
+extern int __real_fclose(FILE *stream);
+int __wrap_fclose(FILE *stream){
+	if(stream == FAKE_OUTPUT_HANDLE){
+		return 0;
+	}
+	return __real_fclose(stream);
+}
+
 FILE *__wrap__bfd_real_fopen (const char *filename, const char *modes){
 	(void)filename;
-	return fmemopen(::bfd_data, ::bfd_data_size, modes);
+	(void)modes;
+	return FAKE_OUTPUT_HANDLE;
 }
 
 #pragma endregion

@@ -131,6 +131,7 @@ add_custom_target(build_gas_shared
 		-Wl,--wrap=_bfd_elf_set_section_contents
 		# Output hooks
 		-Wl,--wrap=_bfd_real_fopen
+		-Wl,--wrap=fclose
 		wrappers.o
 		gas/*.o
 		gas/config/*.o
