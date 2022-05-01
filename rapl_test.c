@@ -268,10 +268,14 @@ int assemble(const char *buffer){
 		int (*stat) (void *abfd, void *stream, struct stat *sb)
 	);
 
+	GFUNC(void *, bfd_openw, const char *filename, const char *target);
+
 	GFUNC(int, bfd_close, void *abfd);
 
 	// from wrappers.cpp
-	GFUNC(void, malloc_gc);	
+	GFUNC(void, malloc_gc);
+	GFUNC(void *, bfd_data_alloc, size_t);
+	GFUNC(size_t, bfd_data_written);
 
 	/** globals **/
 	GVAR(void **, stdoutput);
@@ -291,6 +295,12 @@ int assemble(const char *buffer){
 
 	GFUNC(void, subseg_change, void *seg, int subseg);
 
+/**
+	GFUNC(void*, state_init);
+	GFUNC(void, state_restore, void *state);
+	void *binutils_state = state_init();
+*/
+
 	// reset globals
 	*now_seg = NULL;
 	*now_subseg = NULL;
@@ -307,22 +317,16 @@ int assemble(const char *buffer){
 	void *bfd_abs_section_ptr = (void *)((uintptr_t)_bfd_std_section + (296 * 2));
 	subseg_change(bfd_abs_section_ptr, 0);
 
-	
-	//local_symbol_make(".gasversion", bfd_abs_section_ptr, predefined_address_frag, 0);
 
 	#define MEM_SIZE 1024 * 1024
-	unsigned char *mem = calloc(MEM_SIZE, 1);
+	unsigned char *mem = bfd_data_alloc(MEM_SIZE);
 
-	/**
-	 * create a fake output buffer.
-	 * it's actually in read mode, as signaled by the r in "openr"
-	 * this will conveniently cause all write operations to be ignored
-	 */
-	*stdoutput = bfd_openr_iovec(
-		"dummy", NULL,
-		iovec_open, mem,
-		iovec_read, NULL, NULL
-	);
+	*stdoutput = bfd_openw("dummy", "default");
+	if(*stdoutput == NULL){
+		fprintf(stderr, "bfd_openw() failed\n");
+		return 1;
+	}
+
 	// depends on stdoutput being initialized
 	dot_symbol_init();
 	
@@ -343,13 +347,12 @@ int assemble(const char *buffer){
 	 */
 	*text_section = subseg_new(".text", 0);
 	//bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8);
-	bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8 | 256);
+	//bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8);
+	bfd_set_section_flags(*text_section, 1 | 2 | 4 | 0x10 |8);
 
-	// read the current fragment chain
+	// read the current fragment chain (aka of the .text section)
 	frchainS *_frchain_now = *frchain_now;
 	void *_frag_now = *frag_now;
-
-	//subseg_set(*text_section, 0);
 
 	/** required if using anything from write.c (which assumes they are initialized) */
 	GVAR(void **, reg_section);
@@ -357,7 +360,10 @@ int assemble(const char *buffer){
 	*reg_section = subseg_new ("*GAS `reg' section*", 0);
   	*expr_section = subseg_new ("*GAS `expr' section*", 0);
 
-	// set frchain_now to the .text section
+	/**
+	 * reset the current pointers to the .text section
+	 * for the upcoming assemble operation
+	 **/
 	*frchain_now = _frchain_now;
 	*frag_now = _frag_now;
 
@@ -378,40 +384,31 @@ int assemble(const char *buffer){
 	DPRINTF("%p %p %p\n", _frchain_now->frch_root, _frchain_now->frch_last, _frchain_now->frch_next);
 	DPUTS("--");
 
-
-	struct relax_seg_info rsi = {
-		.pass = 0,
-	};
-
-	GFUNC(int, relax_segment, void *segment_frag_root, void *segment, int pass);
-	GFUNC(void, frag_wane, void *fragP);
-
-	GFUNC(long, i386_generic_table_relax_frag,
-		void *segment, void *fragP, long stretch
-	);
 	GFUNC(void, write_object_file);
-
 	write_object_file();
-
-#if 0
-	unsigned size = 0;
-	// dump and clear the current fragment chain
-	unsigned char *bytes = gc_frchain(_frchain_now, &size);
-	for(unsigned i=0; i<size; i++){
-		printf("%02hhx ", bytes[i]);
-	}
-	puts("");
-	free(bytes);
-#endif
 
 	if(md_end != NULL) md_end();
 
 	bfd_close(*stdoutput);
 
-	free(mem);
-	
+	size_t written = bfd_data_written();
+	for(size_t i=0; i<written; i++){
+		printf("%02hhx ", mem[i]);
+	}
+	puts("");
+
+	// bfd caches opened files. undo that
+	GFUNC(int, bfd_cache_close_all);
+	bfd_cache_close_all();
+
+	// reset the symbol table state
+	GVAR(int *, symbol_table_frozen);
+	*symbol_table_frozen = 0;
+
 	// free all memory allocated by GAS
 	malloc_gc();
+
+	//state_restore(binutils_state);
 	return 0;
 }
 

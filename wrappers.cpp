@@ -12,6 +12,7 @@
  */
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <algorithm>
 
 #ifdef DEBUG
@@ -39,15 +40,43 @@ static std::unordered_set<void *> g_allocations;
 
 extern "C" {
 
-#if 1
+/** binutils bss **/
+extern uint8_t _end;
+extern uint8_t _edata;
+extern uint8_t _etext;
+extern uint8_t __bss_start;
+
+static uint8_t *bfd_data = nullptr;
+static size_t bfd_data_size = 0;
+static size_t bfd_data_count = 0;
+
+/**
+ * these hooks are needed to avoid a crash
+ * since we are working on an uninitialized ELF file 
+ */
 uintptr_t __wrap_bfd_elf_obj_attr_size (void *abfd){
 	return 0;
 }
 bool __wrap_bfd_set_symtab (void *abfd, void **location, unsigned int symcount){
 	return true;
 }
-#endif
 
+/**
+ * @brief Hook for the implementation of "set_section_contents"
+ * "elf" because we're targeting the elf-linux backend for now
+ **/
+bool __wrap__bfd_elf_set_section_contents (
+	void *abfd, void *section,
+	const void *location,
+	uintptr_t offset,
+	uintptr_t count
+){
+	if(offset > bfd_data_size) return false;
+	if(offset + count > bfd_data_size) return false;
+	std::memcpy(&::bfd_data[offset], location, count);
+	::bfd_data_count += count;
+	return true;
+}
 
 extern void *__real_malloc(size_t size);
 extern void __real_free(void *ptr);
@@ -143,5 +172,27 @@ void malloc_gc(){
 	}
 	g_allocations.clear();
 }
+
+#pragma region fopen_hooks
+void *bfd_data_alloc(size_t size){
+	// allocate through the GC malloc
+	::bfd_data = static_cast<uint8_t *>(__wrap_malloc(size));
+	if(bfd_data != nullptr){
+		::bfd_data_size = size;
+	}
+	::bfd_data_count = 0;
+	return ::bfd_data;
+}
+
+size_t bfd_data_written(){
+	return ::bfd_data_count;
+}
+
+FILE *__wrap__bfd_real_fopen (const char *filename, const char *modes){
+	(void)filename;
+	return fmemopen(::bfd_data, ::bfd_data_size, modes);
+}
+
+#pragma endregion
 
 }

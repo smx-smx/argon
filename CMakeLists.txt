@@ -120,12 +120,17 @@ add_custom_target(build_gas_shared
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
 	COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS}
 		-shared
+		# GC malloc hooks
 		-Wl,--wrap=malloc
 		-Wl,--wrap=free
 		-Wl,--wrap=realloc
 		-Wl,--wrap=calloc
+		# fake ELF hooks
 		-Wl,--wrap=bfd_elf_obj_attr_size
 		-Wl,--wrap=bfd_set_symtab
+		-Wl,--wrap=_bfd_elf_set_section_contents
+		# Output hooks
+		-Wl,--wrap=_bfd_real_fopen
 		wrappers.o
 		gas/*.o
 		gas/config/*.o
