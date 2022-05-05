@@ -17,7 +17,6 @@
 #include <stdlib.h>
 
 #define CLEAR(x) memset(&x, 0x00, sizeof(x))
-#define CLEARP(x) memset(x, 0x00, sizeof(*x))
 #define CLEAR_SYMBOL(x) memset(&x, 0x00, __argon_get_symbol_size())
 
 extern struct xsymbol dot_symbol_x;
@@ -26,6 +25,9 @@ extern size_t __argon_get_symbol_size();
 // free all memory allocated by GAS
 extern void argon_malloc_gc();
 
+//#define ABSOLUTE_JUMPS
+#define TEXT_FLAGS (SEC_ALLOC | SEC_LOAD | /*SEC_RELOC |*/ SEC_CODE | SEC_READONLY)
+
 void argon_init_gas(){
 	symbol_begin();
 	subsegs_begin();
@@ -33,7 +35,12 @@ void argon_init_gas(){
 	read_begin();
 	expr_begin();
 
+#ifdef ABSOLUTE_JUMPS
 	text_section = subseg_new (TEXT_SECTION_NAME, 0);
+
+	frchainS *text_frchain = frchain_now;
+	fragS *text_frag = frag_now;
+#endif
 
 	segT abs_section = subseg_new (BFD_ABS_SECTION_NAME, 0);
   	segT und_section = subseg_new (BFD_UND_SECTION_NAME, 0);
@@ -41,10 +48,22 @@ void argon_init_gas(){
   	reg_section = subseg_new ("*GAS `reg' section*", 0);
   	expr_section = subseg_new ("*GAS `expr' section*", 0);
 
-	// depends on stdoutput being initialized
 	dot_symbol_init();
 
 	flag_always_generate_output = 1;
+
+#ifdef ABSOLUTE_JUMPS
+	/**
+	 * set the current pointers to the .text section
+	 * for the upcoming assemble operation
+	 **/
+	frchain_now = text_frchain;
+	frag_now = text_frag;
+#else
+	text_section = subseg_new (TEXT_SECTION_NAME, 0);
+#endif
+
+	bfd_set_section_flags (text_section, TEXT_FLAGS);
 }
 
 void argon_reset_gas(){
@@ -75,7 +94,6 @@ void argon_reset_gas(){
 	CLEAR_SYMBOL(abs_symbol);
 	CLEAR_SYMBOL(dot_symbol);
 	CLEAR_SYMBOL(dot_symbol_x);
-
 
 	bfd_com_section_ptr->userdata = NULL;
 	bfd_ind_section_ptr->userdata = NULL;

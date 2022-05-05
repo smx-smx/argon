@@ -68,29 +68,6 @@ static HMODULE gas;
 static void *gas;
 #endif
 
-struct obstack          /* control current object in current chunk */
-{
-  size_t chunk_size;     /* preferred size to allocate chunks in */
-  void *chunk; /* address of current struct obstack_chunk */
-  char *object_base;            /* address of object we are building */
-  char *next_free;              /* where to add next char to current object */
-  char *chunk_limit;            /* address of char after current chunk */
-};
-
-typedef struct frchain			/* control building of a frag chain */
-{				/* FRCH = FRagment CHain control */
-  void *frch_root;	/* 1st struct frag in chain, or NULL */
-  void *frch_last;	/* last struct frag in chain, or NULL */
-  void *frch_next;	/* next in chain of struct frchain-s */
-  int frch_subseg;		/* subsegment number of this chain */
-  void *fix_root;		/* Root of fixups for this subsegment.  */
-  void *fix_tail;		/* Last fixup for this subsegment.  */
-  struct obstack frch_obstack;	/* for objects in this frag chain */
-  // don't care
-  //void *frch_frag_now;		/* frag_now for this subsegment */
-  //void *frch_cfi_data;
-} frchainS;
-
 static void *resolveSymbol(char *sym){
 #ifdef WIN32
 	return (void *)GetProcAddress(gas, sym);
@@ -103,20 +80,6 @@ static void *resolveSymbol(char *sym){
 
 #define GFUNC(ret_type, function, ...) \
 	ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
-
-static void *iovec_open (void *nbfd, void *open_closure){
-	UNUSED(nbfd);
-	return open_closure;
-}
-static off_t iovec_read(
-	void *nbfd, void *stream, void *buf,
-	off_t nbytes, off_t offset
-){
-	UNUSED(nbfd);
-	unsigned char *mem = (unsigned char *)stream;
-	memcpy(buf, &mem[offset], nbytes);
-	return nbytes;
-}
 
 typedef struct _pseudo_type
 {
@@ -145,55 +108,6 @@ void call_pseudo(pseudo_typeS *table, const char *name){
 #define DPRINTF(fmt, ...) printf(fmt, __VA_ARGS__)
 #define DPUTS(str) puts(str)
 #endif
-
-void print_frchain(frchainS *chain, int wipe){
-	DPRINTF("%p %p %p\n", chain->frch_root, chain->frch_last, chain->frch_next);
-
-	struct obstack *ob = &chain->frch_obstack;
-	DPRINTF("%p\n", ob->chunk_size);
-  	DPRINTF("%p\n", ob->chunk);
-  	DPRINTF("%p\n", ob->object_base);
-  	DPRINTF("%p\n", ob->next_free);
-  	DPRINTF("%p\n", ob->chunk_limit);
-
-	unsigned size = ob->next_free - ob->object_base;
-	unsigned char *p;
-	unsigned i;
-	
-	for(p = (unsigned char *)ob->object_base, i=0; i<size ; i++, p++){
-		DPRINTF("%02hhx ", *p);
-	}
-	DPUTS("");
-
-	if(wipe) {
-		memset(ob->object_base, 0x00, size);
-		ob->next_free = ob->object_base;
-	}
-}
-
-void obstack_mark_empty(struct obstack *ob){
-	ob->next_free = ob->object_base;
-}
-
-// get and clear
-void *gc_frchain(frchainS *chain, unsigned *pSize){
-	print_frchain(chain, 0);
-	
-	struct obstack *ob = &chain->frch_obstack;
-	unsigned size = ob->next_free - ob->object_base;
-
-	unsigned char *mem = calloc(size, 1);
-	memcpy(mem, ob->object_base, size);
-	memset(ob->object_base, 0x00, size);
-	
-	obstack_mark_empty(ob);
-
-	if(pSize != NULL){
-		*pSize = size;
-	}
-	return mem;
-}
-
 
 #ifdef WIN32
 int launchDebugger() {
@@ -243,36 +157,14 @@ void breakpoint_me(){
 }
 
 int assemble(const char *buffer){
-	GFUNC(void, subsegs_begin);
-	GFUNC(void, symbol_begin);
-	GFUNC(void, read_begin);
-	GFUNC(void, expr_begin);
-	GFUNC(void, dot_symbol_init);
-
-	GFUNC(void *, subseg_new, const char *segname, int subseg);
-	GFUNC(void, bfd_set_section_flags, void *, unsigned);
-	GFUNC(void, subseg_set, void *, int);
-
 	GFUNC(int, md_parse_option, int c, const char *arg);
 	GFUNC(void, md_begin);
 	GFUNC(void, md_assemble, char *line);
 	GFUNC(void, md_end);
 
-	GFUNC(void *, bfd_openr_iovec,
-		const char *filename, const char *target,
-		void *(*open) (void *nbfd, void *open_closure),
-		void *open_closure,
-		off_t (*pread) (
-			void *nbfd,
-			void *stream, void *buf,
-			off_t nbytes, off_t offset),
-		int (*close) (void *nbfd, void *stream),
-		int (*stat) (void *abfd, void *stream, struct stat *sb)
-	);
-
 	GFUNC(void *, bfd_openw, const char *filename, const char *target);
-
 	GFUNC(int, bfd_close, void *abfd);
+	GFUNC(void, write_object_file);
 
 	// from wrappers.cpp
 	GFUNC(void *, argon_bfd_data_alloc, size_t);
@@ -281,26 +173,11 @@ int assemble(const char *buffer){
 	/** globals **/
 	GVAR(void **, stdoutput);
 	GVAR(pseudo_typeS *, md_pseudo_table);
-	GVAR(void **, text_section);
-
-	GVAR(frchainS **, frchain_now);
-	GVAR(void **, now_seg);
-	GVAR(void **, now_subseg);
-	GVAR(void **, frag_now);
-
-	GVAR(void *, _bfd_std_section);
-	GVAR(void *, predefined_address_frag);
-
-	GFUNC(void *, local_symbol_make,
-		const char *name, void *section, void *frag, uintptr_t val);
-
-	GFUNC(void, subseg_change, void *seg, int subseg);
 
 	GFUNC(void, argon_init_gas);
 	GFUNC(void, argon_reset_gas);
 	
 	argon_reset_gas();
-
 
 	// $DEBUG
 	breakpoint_me();
@@ -328,25 +205,6 @@ int assemble(const char *buffer){
 	//call_pseudo(md_pseudo_table, "code64");
 	call_pseudo(md_pseudo_table, "code32");
 
-	/**
-	 * create the .text section 
-	 */
-	*text_section = subseg_new(".text", 0);
-	//bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8);
-	//bfd_set_section_flags(*text_section, 1 | 2 | /*4 |*/ 0x10 |8);
-	bfd_set_section_flags(*text_section, 1 | 2 | 4 | 0x10 |8);
-
-	// read the current fragment chain (aka of the .text section)
-	frchainS *_frchain_now = *frchain_now;
-	void *_frag_now = *frag_now;
-
-	/**
-	 * reset the current pointers to the .text section
-	 * for the upcoming assemble operation
-	 **/
-	*frchain_now = _frchain_now;
-	*frag_now = _frag_now;
-
 	md_begin();
 	
 	/**
@@ -364,7 +222,6 @@ int assemble(const char *buffer){
 	DPRINTF("%p %p %p\n", _frchain_now->frch_root, _frchain_now->frch_last, _frchain_now->frch_next);
 	DPUTS("--");
 
-	GFUNC(void, write_object_file);
 	write_object_file();
 
 	if(md_end != NULL) md_end();
