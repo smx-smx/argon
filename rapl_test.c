@@ -68,12 +68,6 @@ static HMODULE gas;
 static void *gas;
 #endif
 
-struct relax_seg_info
-{
-  int pass;
-  int changed;
-};
-
 struct obstack          /* control current object in current chunk */
 {
   size_t chunk_size;     /* preferred size to allocate chunks in */
@@ -177,6 +171,10 @@ void print_frchain(frchainS *chain, int wipe){
 	}
 }
 
+void obstack_mark_empty(struct obstack *ob){
+	ob->next_free = ob->object_base;
+}
+
 // get and clear
 void *gc_frchain(frchainS *chain, unsigned *pSize){
 	print_frchain(chain, 0);
@@ -188,7 +186,7 @@ void *gc_frchain(frchainS *chain, unsigned *pSize){
 	memcpy(mem, ob->object_base, size);
 	memset(ob->object_base, 0x00, size);
 	
-	ob->next_free = ob->object_base;
+	obstack_mark_empty(ob);
 
 	if(pSize != NULL){
 		*pSize = size;
@@ -240,6 +238,10 @@ int launchDebugger() {
 
 static void *gas_handle = NULL;
 
+void breakpoint_me(){
+	puts("");
+}
+
 int assemble(const char *buffer){
 	GFUNC(void, subsegs_begin);
 	GFUNC(void, symbol_begin);
@@ -273,9 +275,8 @@ int assemble(const char *buffer){
 	GFUNC(int, bfd_close, void *abfd);
 
 	// from wrappers.cpp
-	GFUNC(void, malloc_gc);
-	GFUNC(void *, bfd_data_alloc, size_t);
-	GFUNC(size_t, bfd_data_written);
+	GFUNC(void *, argon_bfd_data_alloc, size_t);
+	GFUNC(size_t, argon_bfd_data_written);
 
 	/** globals **/
 	GVAR(void **, stdoutput);
@@ -295,31 +296,17 @@ int assemble(const char *buffer){
 
 	GFUNC(void, subseg_change, void *seg, int subseg);
 
-/**
-	GFUNC(void*, state_init);
-	GFUNC(void, state_restore, void *state);
-	void *binutils_state = state_init();
-*/
+	GFUNC(void, argon_init_gas);
+	GFUNC(void, argon_reset_gas);
+	
+	argon_reset_gas();
 
-	// reset globals
-	*now_seg = NULL;
-	*now_subseg = NULL;
-	*frchain_now = NULL;
-	*frag_now = NULL;
 
-	symbol_begin();
-	subsegs_begin();
-	// initializes obstacks
-	read_begin();
-	expr_begin();
-
-	// we need this to initialize bfd_abs_section_ptr
-	void *bfd_abs_section_ptr = (void *)((uintptr_t)_bfd_std_section + (296 * 2));
-	subseg_change(bfd_abs_section_ptr, 0);
-
+	// $DEBUG
+	breakpoint_me();
 
 	#define MEM_SIZE 1024 * 1024
-	unsigned char *mem = bfd_data_alloc(MEM_SIZE);
+	unsigned char *mem = argon_bfd_data_alloc(MEM_SIZE);
 
 	*stdoutput = bfd_openw("dummy", "default");
 	if(*stdoutput == NULL){
@@ -327,8 +314,7 @@ int assemble(const char *buffer){
 		return 1;
 	}
 
-	// depends on stdoutput being initialized
-	dot_symbol_init();
+	argon_init_gas();
 	
 	md_parse_option('V', NULL);
 
@@ -353,12 +339,6 @@ int assemble(const char *buffer){
 	// read the current fragment chain (aka of the .text section)
 	frchainS *_frchain_now = *frchain_now;
 	void *_frag_now = *frag_now;
-
-	/** required if using anything from write.c (which assumes they are initialized) */
-	GVAR(void **, reg_section);
-	GVAR(void **, expr_section);
-	*reg_section = subseg_new ("*GAS `reg' section*", 0);
-  	*expr_section = subseg_new ("*GAS `expr' section*", 0);
 
 	/**
 	 * reset the current pointers to the .text section
@@ -391,24 +371,12 @@ int assemble(const char *buffer){
 
 	bfd_close(*stdoutput);
 
-	size_t written = bfd_data_written();
+	size_t written = argon_bfd_data_written();
 	for(size_t i=0; i<written; i++){
 		printf("%02hhx ", mem[i]);
 	}
 	puts("");
 
-	// bfd caches opened files. undo that
-	GFUNC(int, bfd_cache_close_all);
-	bfd_cache_close_all();
-
-	// reset the symbol table state
-	GVAR(int *, symbol_table_frozen);
-	*symbol_table_frozen = 0;
-
-	// free all memory allocated by GAS
-	malloc_gc();
-
-	//state_restore(binutils_state);
 	return 0;
 }
 
@@ -436,6 +404,7 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 
+#if 1
 	char buffer[128] = {0};
 	while(!feof(stdin)){
 		fgets(buffer, sizeof(buffer), stdin);
@@ -447,6 +416,12 @@ int main(int argc, char *argv[]){
 		}
 		assemble(&buffer[0]);
 	}
+#else
+	assemble("mp .");
+	assemble("jmp .");
+	//assemble("jmp .");
+	//assemble("xor eax, eax");
+#endif
 
 #ifdef WIN32
 	FreeLibrary(gas);

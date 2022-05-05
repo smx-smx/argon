@@ -25,7 +25,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 
-set(BINUTILS_CFLAGS -fPIC)
+set(BINUTILS_CFLAGS
+	-fPIC
+)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
 	list(APPEND BINUTILS_CFLAGS -g -ggdb3)
@@ -56,7 +58,7 @@ endif()
 add_custom_command(
 	OUTPUT ${binutils_BINARY_DIR}/config.status
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
-	COMMAND ${CMAKE_COMMAND} -E env CFLAGS="${BINUTILS_CFLAGS}"
+	COMMAND ${CMAKE_COMMAND} -E env CC="${CMAKE_SOURCE_DIR}/cc_wrap" CFLAGS="${BINUTILS_CFLAGS}"
 		${binutils_SOURCE_DIR}/configure 
 		--disable-nls
 		--prefix=${binutils_BINARY_DIR}
@@ -101,6 +103,31 @@ add_custom_target(build_gas_static
 )
 add_dependencies(build_gas_static build_gas)
 
+set(BINUTILS_EXTERNAL_CFLAGS
+	-I${binutils_BINARY_DIR}/bfd
+	-I${binutils_BINARY_DIR}/gas
+	-I${binutils_SOURCE_DIR}/include
+	-I${binutils_SOURCE_DIR}
+	-I${binutils_SOURCE_DIR}/gas
+	-I${binutils_SOURCE_DIR}/gas/config
+)
+
+## build binutils glue
+add_custom_command(
+	OUTPUT ${binutils_BINARY_DIR}/glue.o
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/glue.c
+	COMMAND ${CMAKE_C_COMPILER}
+		${BINUTILS_CFLAGS}
+		${BINUTILS_EXTERNAL_CFLAGS}
+		-c ${CMAKE_CURRENT_SOURCE_DIR}/glue.c
+		-o ${binutils_BINARY_DIR}/glue.o
+)
+add_custom_target(build_glue
+	DEPENDS ${binutils_BINARY_DIR}/glue.o
+	COMMENT "building binutils glue"
+)
+add_dependencies(build_glue build_gas)
+
 ## build malloc wrappers
 add_custom_command(
 	OUTPUT ${binutils_BINARY_DIR}/wrappers.o
@@ -132,7 +159,8 @@ add_custom_target(build_gas_shared
 		# Output hooks
 		-Wl,--wrap=_bfd_real_fopen
 		-Wl,--wrap=fclose
-		wrappers.o
+		# add glue and wrappers
+		glue.o wrappers.o
 		gas/*.o
 		gas/config/*.o
 		opcodes/*.o
@@ -143,6 +171,7 @@ add_custom_target(build_gas_shared
 		-o gas/${GAS_SHARED_LIB_NAME}
 )
 add_dependencies(build_gas_shared build_gas)
+add_dependencies(build_gas_shared build_glue)
 add_dependencies(build_gas_shared build_wrappers)
 
 add_library(libgas SHARED IMPORTED)

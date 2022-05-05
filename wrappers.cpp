@@ -3,7 +3,7 @@
  * 
  * @file wrappers.cpp
  * @author Stefano Moioli (smxdev4@gmail.comcom)
- * @brief 
+ * @brief GAS internal hooks
  * @version 0.1
  * @date 2022-05-01
  * 
@@ -158,7 +158,7 @@ void __wrap_free(void *ptr){
 /**
  * @brief Frees all the memory allocations that haven't been freed 
  */
-void malloc_gc(){
+void argon_malloc_gc(){
 	for(auto const& item : g_allocations){
 	#ifdef DEBUG
 		void *ptr = item.first;
@@ -174,7 +174,7 @@ void malloc_gc(){
 }
 
 #pragma region fopen_hooks
-void *bfd_data_alloc(size_t size){
+void *argon_bfd_data_alloc(size_t size){
 	// allocate through the GC malloc
 	::bfd_data = static_cast<uint8_t *>(__wrap_malloc(size));
 	if(bfd_data != nullptr){
@@ -184,7 +184,7 @@ void *bfd_data_alloc(size_t size){
 	return ::bfd_data;
 }
 
-size_t bfd_data_written(){
+size_t argon_bfd_data_written(){
 	return ::bfd_data_count;
 }
 

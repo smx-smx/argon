@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+CC=gcc
+
+if [[ "$@" == *"gas/symbols.c"* ]]; then
+	file_path="${@: -1}"
+	# exclude last argument
+	args="${@:1:$(($#-1))}"
+	#set -- "${@:1:$(($#-1))}"
+
+	exec ${CC} ${args} -x c - < <(
+		cat "${file_path}"
+		cat <<-EOF
+		size_t __argon_get_symbol_size(void);
+		size_t __argon_get_symbol_size(void) {
+		    return sizeof(struct symbol);
+		}
+		EOF
+	)
+else
+	exec ${CC} "$@"
+fi
