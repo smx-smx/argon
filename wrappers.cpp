@@ -77,16 +77,6 @@ void *argon_tc_pseudo_ops(){
 	return ::tc_pseudo_table;
 }
 
-#if 0
-extern const char *__real_as_where(unsigned int *linep);
-const char *__wrap_as_where (unsigned int *linep){
-	if(linep == NULL){
-		return "NULL";
-	}
-    return __real_as_where (linep);
-}
-#endif
-
 /**
  * @brief Hook for the implementation of "set_section_contents"
  * "elf" because we're targeting the elf-linux backend for now

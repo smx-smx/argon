@@ -211,48 +211,47 @@ int assemble(const char *buffer){
 	
 	//md_parse_option('V', NULL);
 
-#ifdef TARGET_MIPS
-	set_option("mips5", NULL);
-	set_option("mips32", NULL);
+	GVAR(void *, bfd_i386_arch);
+	GVAR(void *, bfd_mips_arch);
+	GVAR(void *, bfd_riscv_arch);
 
-	GVAR(int *, mips_flag_mdebug);
-	if(mips_flag_mdebug){
+	if(bfd_i386_arch != NULL){
+		set_option("64", NULL);
+		set_option("march", "generic64");
+		set_option("mmnemonic", "intel");
+		set_option("msyntax", "intel");
+		set_option("mnaked-reg", NULL);
+		
+		// switch to CODE64 mode
+		//call_pseudo("code64");
+		call_pseudo("code32");
+	}
+
+	if(bfd_mips_arch != NULL){
+		set_option("mips5", NULL);
+		set_option("mips32", NULL);
+
+		GVAR(int *, mips_flag_mdebug);
 		*mips_flag_mdebug = 0;
 	}
-#endif
 	
+	if(bfd_riscv_arch != NULL){
+		GFUNC(void, riscv_after_parse_args);
+		GFUNC(void, riscv_pop_insert);
 
-#ifdef TARGET_INTEL
-	set_option("64", NULL);
-	set_option("march", "generic64");
-	set_option("mmnemonic", "intel");
-	set_option("msyntax", "intel");
-	set_option("mnaked-reg", NULL);
-	
-	// switch to CODE64 mode
-	//call_pseudo("code64");
-	call_pseudo("code32");
-#endif
+		// NOTE: requires patch
+		GVAR(void **, riscv_subsets);
+		if(riscv_subsets){
+			*riscv_subsets = NULL;
+		}
 
-	GFUNC(void, riscv_after_parse_args);
-	GFUNC(void, riscv_pop_insert);
-
-	GVAR(char **, input_line_pointer);
-
-	// NOTE: requires patch
-	GVAR(void **, riscv_subsets);
-	if(riscv_subsets){
-		*riscv_subsets = NULL;
-	}
-
-	if(riscv_after_parse_args){
 		// inits riscv_subsets
 		riscv_after_parse_args();
-	}
 
-	pseudo_typeS *tc_pseudo_ops = NULL;
-	char *line_buf = argon_gcmalloc(32);
-	memset(line_buf, 0x00, 32);
+		pseudo_typeS *tc_pseudo_ops = NULL;
+		char *line_buf = argon_gcmalloc(32);
+		memset(line_buf, 0x00, 32);
+	}
 
 	md_begin();
 	
@@ -282,30 +281,6 @@ int assemble(const char *buffer){
 		printf("%02hhx ", mem[i]);
 	}
 	puts("");	
-
-#if 0
-	if(riscv_pop_insert){
-		// register riscv pseudo-ops
-		riscv_pop_insert();
-		tc_pseudo_ops = argon_tc_pseudo_ops();
-
-		// perform a push to rewrite riscv_subsets
-		char *saved_lineptr = *input_line_pointer;
-		strcpy(line_buf, "push");
-		*input_line_pointer = line_buf;
-		call_pseudo_table(tc_pseudo_ops, "option");
-		*input_line_pointer = saved_lineptr;
-	}
-
-	if(riscv_pop_insert){
-		// perform a pop to restore riscv_opts_stack
-		char *saved_lineptr = *input_line_pointer;
-		strcpy(line_buf, "pop");
-		*input_line_pointer = line_buf;
-		call_pseudo_table(tc_pseudo_ops, "option");
-		*input_line_pointer = saved_lineptr;
-	}
-#endif
 
 	return 0;
 }
