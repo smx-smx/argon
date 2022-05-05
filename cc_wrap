@@ -16,6 +16,15 @@ if [[ "$@" == *"gas/symbols.c"* ]]; then
 		}
 		EOF
 	)
+elif [[ "$@" == *"gas/config/tc-riscv.c"* ]]; then
+	file_path="${@: -1}"
+	# exclude last argument
+	args="${@:1:$(($#-1))}"
+	#set -- "${@:1:$(($#-1))}"
+
+	exec ${CC} ${args} -x c - < <(
+		cat "${file_path}" | perl -pe 's/static(.*riscv_subsets)/$1/g'
+	)
 else
 	exec ${CC} "$@"
 fi

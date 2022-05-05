@@ -132,7 +132,9 @@ add_dependencies(build_glue build_gas)
 add_custom_command(
 	OUTPUT ${binutils_BINARY_DIR}/wrappers.o
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/wrappers.cpp 
-	COMMAND ${CMAKE_CXX_COMPILER} ${BINUTILS_CFLAGS}
+	COMMAND ${CMAKE_CXX_COMPILER}
+		${BINUTILS_CFLAGS}
+		${BINUTILS_EXTERNAL_CFLAGS}
 		-c ${CMAKE_CURRENT_SOURCE_DIR}/wrappers.cpp
 		-o ${binutils_BINARY_DIR}/wrappers.o
 )
@@ -152,9 +154,12 @@ add_custom_target(build_gas_shared
 		-Wl,--wrap=free
 		-Wl,--wrap=realloc
 		-Wl,--wrap=calloc
+		# TC pseudo ops
+		-Wl,--wrap=pop_insert
 		# fake ELF hooks
 		-Wl,--wrap=bfd_elf_obj_attr_size
 		-Wl,--wrap=bfd_set_symtab
+		-Wl,--wrap=bfd_elf_get_obj_attr_int
 		-Wl,--wrap=_bfd_elf_set_section_contents
 		# Output hooks
 		-Wl,--wrap=_bfd_real_fopen

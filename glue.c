@@ -28,6 +28,8 @@ extern void argon_malloc_gc();
 //#define ABSOLUTE_JUMPS
 #define TEXT_FLAGS (SEC_ALLOC | SEC_LOAD | /*SEC_RELOC |*/ SEC_CODE | SEC_READONLY)
 
+static struct elf_obj_tdata fake_tdata;
+
 void argon_init_gas(){
 	symbol_begin();
 	subsegs_begin();
@@ -41,6 +43,9 @@ void argon_init_gas(){
 	frchainS *text_frchain = frchain_now;
 	fragS *text_frag = frag_now;
 #endif
+
+	data_section = subseg_new (DATA_SECTION_NAME, 0);
+  	bss_section = subseg_new (BSS_SECTION_NAME, 0);
 
 	segT abs_section = subseg_new (BFD_ABS_SECTION_NAME, 0);
   	segT und_section = subseg_new (BFD_UND_SECTION_NAME, 0);
@@ -64,6 +69,11 @@ void argon_init_gas(){
 #endif
 
 	bfd_set_section_flags (text_section, TEXT_FLAGS);
+	bfd_set_section_alignment(text_section, 0);
+
+
+	// set fake ELF data
+	elf_tdata(stdoutput) = &fake_tdata;
 }
 
 void argon_reset_gas(){
@@ -86,7 +96,8 @@ void argon_reset_gas(){
 	abs_section_sym = NULL;
 	abs_section_offset = 0;
 
-	do_not_pad_sections_to_alignment = 0;
+	// don't pad sections
+	do_not_pad_sections_to_alignment = 1;
 	
 	CLEAR(cond_obstack);
 	CLEAR(notes);
@@ -99,4 +110,11 @@ void argon_reset_gas(){
 	bfd_ind_section_ptr->userdata = NULL;
 	bfd_abs_section_ptr->userdata = NULL;
 	bfd_und_section_ptr->userdata = NULL;
+
+	CLEAR(fake_tdata);
+}
+
+void *argon_gcmalloc(size_t sz){
+	// in binutils context, malloc is overridden by wrapper.cpp
+	return malloc(sz);
 }

@@ -10,6 +10,8 @@
  * @copyright Copyright (c) 2022
  * 
  */
+#include "config.h"
+#include "bfd.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -61,16 +63,45 @@ bool __wrap_bfd_set_symtab (void *abfd, void **location, unsigned int symcount){
 	return true;
 }
 
+int __wrap_bfd_elf_get_obj_attr_int (void *abfd, int vendor, unsigned int tag){
+	return 0;
+}
+
+static void *tc_pseudo_table;
+
+void __wrap_pop_insert (const void *table){
+	::tc_pseudo_table = const_cast<void *>(table);
+}
+
+void *argon_tc_pseudo_ops(){
+	return ::tc_pseudo_table;
+}
+
+#if 0
+extern const char *__real_as_where(unsigned int *linep);
+const char *__wrap_as_where (unsigned int *linep){
+	if(linep == NULL){
+		return "NULL";
+	}
+    return __real_as_where (linep);
+}
+#endif
+
 /**
  * @brief Hook for the implementation of "set_section_contents"
  * "elf" because we're targeting the elf-linux backend for now
  **/
 bool __wrap__bfd_elf_set_section_contents (
-	void *abfd, void *section,
+	void *abfd, asection *section,
 	const void *location,
 	uintptr_t offset,
 	uintptr_t count
 ){
+	// skip non-code sections
+	if(strcmp(section->name, ".text") != 0){
+		return true;
+	}
+
 	if(offset > bfd_data_size) return false;
 	if(offset + count > bfd_data_size) return false;
 	std::memcpy(&::bfd_data[offset], location, count);
@@ -151,8 +182,10 @@ void *__wrap_malloc(size_t size){
 }
 
 void __wrap_free(void *ptr){
-	g_allocations.erase(ptr);
-	__real_free(ptr);
+	if(g_allocations.find(ptr) != g_allocations.end()){
+		g_allocations.erase(ptr);
+		__real_free(ptr);
+	}
 }
 
 /**

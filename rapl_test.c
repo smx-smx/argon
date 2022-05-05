@@ -9,6 +9,7 @@
  * 
  * @copyright Copyright (c) Stefano Moioli 2022
  */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,11 +77,6 @@ static void *resolveSymbol(char *sym){
 #endif
 }
 
-#define GVAR(T, sym) T sym = (T)resolveSymbol(#sym)
-
-#define GFUNC(ret_type, function, ...) \
-	ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
-
 typedef struct _pseudo_type
 {
 	/* assembler mnemonic, lower case, no '.' */
@@ -91,7 +87,21 @@ typedef struct _pseudo_type
 	int poc_val;
 } pseudo_typeS;
 
-void call_pseudo(pseudo_typeS *table, const char *name){
+struct option
+{
+  const char *name;
+  /* has_arg can't be an enum because some compilers complain about
+     type mismatches in all the code that assumes it is an int.  */
+  int has_arg;
+  int *flag;
+  int val;
+};
+
+#define BINUTILS_IMPORT_DECL
+#include "binutils_imports.h"
+#undef BINUTILS_IMPORT_DECL
+
+void call_pseudo_table(pseudo_typeS *table, const char *name){
 	for(pseudo_typeS *p = table; p->poc_name != NULL; p++){
 		if(strcmp(p->poc_name, name) != 0) continue;
 		if(p->poc_handler != NULL){
@@ -99,6 +109,27 @@ void call_pseudo(pseudo_typeS *table, const char *name){
 		}
 		break;
 	}
+}
+
+void call_pseudo(const char *name){
+	call_pseudo_table(md_pseudo_table, name);
+}
+
+
+int set_option(const char *optname, const char *value){
+	for(struct option *p = md_longopts
+		;p->name != NULL
+		;p++
+	){
+		if(!strcmp(p->name, optname)){
+			if(p->has_arg && value == NULL) {
+				return -1;
+			}
+			md_parse_option(p->val, value);
+			return 0;
+		}
+	}
+	return -1;
 }
 
 #if 1
@@ -157,26 +188,11 @@ void breakpoint_me(){
 }
 
 int assemble(const char *buffer){
-	GFUNC(int, md_parse_option, int c, const char *arg);
-	GFUNC(void, md_begin);
-	GFUNC(void, md_assemble, char *line);
-	GFUNC(void, md_end);
+#include "binutils_imports.h"
 
-	GFUNC(void *, bfd_openw, const char *filename, const char *target);
-	GFUNC(int, bfd_close, void *abfd);
-	GFUNC(void, write_object_file);
+#define GVAR(T, sym) T sym = (T)resolveSymbol(#sym)
+#define GFUNC(ret_type, function, ...) ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
 
-	// from wrappers.cpp
-	GFUNC(void *, argon_bfd_data_alloc, size_t);
-	GFUNC(size_t, argon_bfd_data_written);
-
-	/** globals **/
-	GVAR(void **, stdoutput);
-	GVAR(pseudo_typeS *, md_pseudo_table);
-
-	GFUNC(void, argon_init_gas);
-	GFUNC(void, argon_reset_gas);
-	
 	argon_reset_gas();
 
 	// $DEBUG
@@ -193,17 +209,50 @@ int assemble(const char *buffer){
 
 	argon_init_gas();
 	
-	md_parse_option('V', NULL);
+	//md_parse_option('V', NULL);
 
-	md_parse_option(OPTION_64, NULL);
-	//md_parse_option(OPTION_MARCH, "generic64");
-	md_parse_option(OPTION_MMNEMONIC, "intel");
-	md_parse_option(OPTION_MSYNTAX, "intel");
-	md_parse_option(OPTION_MNAKED_REG, NULL);
+#ifdef TARGET_MIPS
+	set_option("mips5", NULL);
+	set_option("mips32", NULL);
 
+	GVAR(int *, mips_flag_mdebug);
+	if(mips_flag_mdebug){
+		*mips_flag_mdebug = 0;
+	}
+#endif
+	
+
+#ifdef TARGET_INTEL
+	set_option("64", NULL);
+	set_option("march", "generic64");
+	set_option("mmnemonic", "intel");
+	set_option("msyntax", "intel");
+	set_option("mnaked-reg", NULL);
+	
 	// switch to CODE64 mode
-	//call_pseudo(md_pseudo_table, "code64");
-	call_pseudo(md_pseudo_table, "code32");
+	//call_pseudo("code64");
+	call_pseudo("code32");
+#endif
+
+	GFUNC(void, riscv_after_parse_args);
+	GFUNC(void, riscv_pop_insert);
+
+	GVAR(char **, input_line_pointer);
+
+	// NOTE: requires patch
+	GVAR(void **, riscv_subsets);
+	if(riscv_subsets){
+		*riscv_subsets = NULL;
+	}
+
+	if(riscv_after_parse_args){
+		// inits riscv_subsets
+		riscv_after_parse_args();
+	}
+
+	pseudo_typeS *tc_pseudo_ops = NULL;
+	char *line_buf = argon_gcmalloc(32);
+	memset(line_buf, 0x00, 32);
 
 	md_begin();
 	
@@ -232,7 +281,31 @@ int assemble(const char *buffer){
 	for(size_t i=0; i<written; i++){
 		printf("%02hhx ", mem[i]);
 	}
-	puts("");
+	puts("");	
+
+#if 0
+	if(riscv_pop_insert){
+		// register riscv pseudo-ops
+		riscv_pop_insert();
+		tc_pseudo_ops = argon_tc_pseudo_ops();
+
+		// perform a push to rewrite riscv_subsets
+		char *saved_lineptr = *input_line_pointer;
+		strcpy(line_buf, "push");
+		*input_line_pointer = line_buf;
+		call_pseudo_table(tc_pseudo_ops, "option");
+		*input_line_pointer = saved_lineptr;
+	}
+
+	if(riscv_pop_insert){
+		// perform a pop to restore riscv_opts_stack
+		char *saved_lineptr = *input_line_pointer;
+		strcpy(line_buf, "pop");
+		*input_line_pointer = line_buf;
+		call_pseudo_table(tc_pseudo_ops, "option");
+		*input_line_pointer = saved_lineptr;
+	}
+#endif
 
 	return 0;
 }
