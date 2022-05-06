@@ -25,6 +25,8 @@ extern size_t __argon_get_symbol_size();
 // free all memory allocated by GAS
 extern void argon_malloc_gc();
 
+extern struct option md_longopts[];
+
 //#define ABSOLUTE_JUMPS
 #define TEXT_FLAGS (SEC_ALLOC | SEC_LOAD | /*SEC_RELOC |*/ SEC_CODE | SEC_READONLY)
 
@@ -133,4 +135,36 @@ void argon_reset_gas(){
 	bfd_und_section_ptr->userdata = NULL;
 
 	CLEAR(fake_tdata);
+}
+
+
+static void argon_call_pseudo_table(pseudo_typeS *table, const char *name){
+	for(pseudo_typeS *p = table; p->poc_name != NULL; p++){
+		if(strcmp(p->poc_name, name) != 0) continue;
+		if(p->poc_handler != NULL){
+			p->poc_handler(p->poc_val);
+		}
+		break;
+	}
+}
+
+void argon_call_pseudo(const char *name){
+	argon_call_pseudo_table(md_pseudo_table, name);
+}
+
+
+int argon_set_option(const char *optname, const char *value){
+	for(struct option *p = md_longopts
+		;p->name != NULL
+		;p++
+	){
+		if(!strcmp(p->name, optname)){
+			if(p->has_arg && value == NULL) {
+				return -1;
+			}
+			md_parse_option(p->val, value);
+			return 0;
+		}
+	}
+	return -1;
 }

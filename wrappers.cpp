@@ -41,13 +41,6 @@ static std::unordered_set<void *> g_allocations;
 
 
 extern "C" {
-
-/** binutils bss **/
-extern uint8_t _end;
-extern uint8_t _edata;
-extern uint8_t _etext;
-extern uint8_t __bss_start;
-
 static uint8_t *bfd_data = nullptr;
 static size_t bfd_data_size = 0;
 static size_t bfd_data_count = 0;

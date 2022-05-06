@@ -25,14 +25,14 @@ GFUNC(void *, argon_tc_pseudo_ops);
 
 /** globals **/
 GVAR(void **, stdoutput);
-GVAR(pseudo_typeS *, md_pseudo_table);
-GVAR(struct option *, md_longopts);
 
 /** from glue.c **/
 GFUNC(void, argon_init_gas);
 GFUNC(void, argon_reset_gas);
 GFUNC(void *, argon_gcmalloc);
 GFUNC(void, argon_clear_htab, void *htab);
+GFUNC(void, argon_call_pseudo, const char *name);
+GFUNC(int, argon_set_option, const char *optname, const char *value);
 
 #undef GVAR
 #undef GFUNC

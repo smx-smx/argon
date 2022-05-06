@@ -25,42 +25,6 @@
 
 #include <sys/stat.h>
 
-#define OPTION_MD_BASE  290
-#define OPTION_32 (OPTION_MD_BASE + 0)
-#define OPTION_64 (OPTION_MD_BASE + 1)
-#define OPTION_DIVIDE (OPTION_MD_BASE + 2)
-#define OPTION_MARCH (OPTION_MD_BASE + 3)
-#define OPTION_MTUNE (OPTION_MD_BASE + 4)
-#define OPTION_MMNEMONIC (OPTION_MD_BASE + 5)
-#define OPTION_MSYNTAX (OPTION_MD_BASE + 6)
-#define OPTION_MINDEX_REG (OPTION_MD_BASE + 7)
-#define OPTION_MNAKED_REG (OPTION_MD_BASE + 8)
-#define OPTION_MRELAX_RELOCATIONS (OPTION_MD_BASE + 9)
-#define OPTION_MSSE2AVX (OPTION_MD_BASE + 10)
-#define OPTION_MSSE_CHECK (OPTION_MD_BASE + 11)
-#define OPTION_MOPERAND_CHECK (OPTION_MD_BASE + 12)
-#define OPTION_MAVXSCALAR (OPTION_MD_BASE + 13)
-#define OPTION_X32 (OPTION_MD_BASE + 14)
-#define OPTION_MADD_BND_PREFIX (OPTION_MD_BASE + 15)
-#define OPTION_MEVEXLIG (OPTION_MD_BASE + 16)
-#define OPTION_MEVEXWIG (OPTION_MD_BASE + 17)
-#define OPTION_MBIG_OBJ (OPTION_MD_BASE + 18)
-#define OPTION_MOMIT_LOCK_PREFIX (OPTION_MD_BASE + 19)
-#define OPTION_MEVEXRCIG (OPTION_MD_BASE + 20)
-#define OPTION_MSHARED (OPTION_MD_BASE + 21)
-#define OPTION_MAMD64 (OPTION_MD_BASE + 22)
-#define OPTION_MINTEL64 (OPTION_MD_BASE + 23)
-#define OPTION_MFENCE_AS_LOCK_ADD (OPTION_MD_BASE + 24)
-#define OPTION_X86_USED_NOTE (OPTION_MD_BASE + 25)
-#define OPTION_MVEXWIG (OPTION_MD_BASE + 26)
-#define OPTION_MALIGN_BRANCH_BOUNDARY (OPTION_MD_BASE + 27)
-#define OPTION_MALIGN_BRANCH_PREFIX_SIZE (OPTION_MD_BASE + 28)
-#define OPTION_MALIGN_BRANCH (OPTION_MD_BASE + 29)
-#define OPTION_MBRANCHES_WITH_32B_BOUNDARIES (OPTION_MD_BASE + 30)
-#define OPTION_MLFENCE_AFTER_LOAD (OPTION_MD_BASE + 31)
-#define OPTION_MLFENCE_BEFORE_INDIRECT_BRANCH (OPTION_MD_BASE + 32)
-#define OPTION_MLFENCE_BEFORE_RET (OPTION_MD_BASE + 33)
-
 #define UNUSED(x) ((void)(x))
 
 #ifdef WIN32
@@ -77,60 +41,9 @@ static void *resolveSymbol(char *sym){
 #endif
 }
 
-typedef struct _pseudo_type
-{
-	/* assembler mnemonic, lower case, no '.' */
-	const char *poc_name;
-	/* Do the work */
-	void (*poc_handler) (int);
-	/* Value to pass to handler */
-	int poc_val;
-} pseudo_typeS;
-
-struct option
-{
-  const char *name;
-  /* has_arg can't be an enum because some compilers complain about
-     type mismatches in all the code that assumes it is an int.  */
-  int has_arg;
-  int *flag;
-  int val;
-};
-
 #define BINUTILS_IMPORT_DECL
 #include "binutils_imports.h"
 #undef BINUTILS_IMPORT_DECL
-
-void call_pseudo_table(pseudo_typeS *table, const char *name){
-	for(pseudo_typeS *p = table; p->poc_name != NULL; p++){
-		if(strcmp(p->poc_name, name) != 0) continue;
-		if(p->poc_handler != NULL){
-			p->poc_handler(p->poc_val);
-		}
-		break;
-	}
-}
-
-void call_pseudo(const char *name){
-	call_pseudo_table(md_pseudo_table, name);
-}
-
-
-int set_option(const char *optname, const char *value){
-	for(struct option *p = md_longopts
-		;p->name != NULL
-		;p++
-	){
-		if(!strcmp(p->name, optname)){
-			if(p->has_arg && value == NULL) {
-				return -1;
-			}
-			md_parse_option(p->val, value);
-			return 0;
-		}
-	}
-	return -1;
-}
 
 #if 1
 #define DPRINTF(fmt, ...)
@@ -217,20 +130,20 @@ int assemble(const char *buffer){
 	GVAR(void *, bfd_rs6000_arch); // PPC
 
 	if(bfd_i386_arch != NULL){
-		set_option("64", NULL);
-		set_option("march", "generic64");
-		set_option("mmnemonic", "intel");
-		set_option("msyntax", "intel");
-		set_option("mnaked-reg", NULL);
+		argon_set_option("64", NULL);
+		argon_set_option("march", "generic64");
+		argon_set_option("mmnemonic", "intel");
+		argon_set_option("msyntax", "intel");
+		argon_set_option("mnaked-reg", NULL);
 		
 		// switch to CODE64 mode
 		//call_pseudo("code64");
-		call_pseudo("code32");
+		argon_call_pseudo("code32");
 	}
 
 	if(bfd_mips_arch != NULL){
-		set_option("mips5", NULL);
-		set_option("mips32", NULL);
+		argon_set_option("mips5", NULL);
+		argon_set_option("mips32", NULL);
 
 		GVAR(int *, mips_flag_mdebug);
 		*mips_flag_mdebug = 0;
@@ -261,10 +174,6 @@ int assemble(const char *buffer){
 
 		// inits riscv_subsets
 		riscv_after_parse_args();
-
-		pseudo_typeS *tc_pseudo_ops = NULL;
-		char *line_buf = argon_gcmalloc(32);
-		memset(line_buf, 0x00, 32);
 	}
 
 	md_begin();
