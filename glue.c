@@ -44,6 +44,10 @@ void *argon_gczalloc(size_t sz){
 	return mem;
 }
 
+void argon_clear_htab(htab_t *htab){
+	memset(htab, 0x00, sizeof(*htab));
+}
+
 void argon_init_gas(){
 	symbol_begin();
 	subsegs_begin();

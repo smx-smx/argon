@@ -18,7 +18,7 @@ GFUNC(void *, bfd_openw, const char *filename, const char *target);
 GFUNC(int, bfd_close, void *abfd);
 GFUNC(void, write_object_file);
 
-// from wrappers.cpp
+/** from wrappers.cpp **/
 GFUNC(void *, argon_bfd_data_alloc, size_t);
 GFUNC(size_t, argon_bfd_data_written);
 GFUNC(void *, argon_tc_pseudo_ops);
@@ -28,9 +28,11 @@ GVAR(void **, stdoutput);
 GVAR(pseudo_typeS *, md_pseudo_table);
 GVAR(struct option *, md_longopts);
 
+/** from glue.c **/
 GFUNC(void, argon_init_gas);
 GFUNC(void, argon_reset_gas);
 GFUNC(void *, argon_gcmalloc);
+GFUNC(void, argon_clear_htab, void *htab);
 
 #undef GVAR
 #undef GFUNC

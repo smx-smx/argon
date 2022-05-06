@@ -196,7 +196,7 @@ int assemble(const char *buffer){
 	argon_reset_gas();
 
 	// $DEBUG
-	breakpoint_me();
+	//breakpoint_me();
 
 	#define MEM_SIZE 1024 * 1024
 	unsigned char *mem = argon_bfd_data_alloc(MEM_SIZE);
@@ -214,6 +214,7 @@ int assemble(const char *buffer){
 	GVAR(void *, bfd_i386_arch);
 	GVAR(void *, bfd_mips_arch);
 	GVAR(void *, bfd_riscv_arch);
+	GVAR(void *, bfd_rs6000_arch); // PPC
 
 	if(bfd_i386_arch != NULL){
 		set_option("64", NULL);
@@ -233,6 +234,19 @@ int assemble(const char *buffer){
 
 		GVAR(int *, mips_flag_mdebug);
 		*mips_flag_mdebug = 0;
+	}
+
+	if(bfd_rs6000_arch != NULL){
+		// NOTE: requires patch
+		GVAR(void *, ppc_hash);
+		GVAR(void *, ppc_macro_hash);
+
+		if(ppc_hash != NULL){
+			argon_clear_htab(ppc_hash);
+		}
+		if(ppc_macro_hash != NULL){
+			argon_clear_htab(ppc_macro_hash);
+		}
 	}
 	
 	if(bfd_riscv_arch != NULL){
@@ -285,6 +299,46 @@ int assemble(const char *buffer){
 	return 0;
 }
 
+#include <time.h>
+#include <unistd.h>
+#include <pthread.h>
+
+// call this function to start a nanosecond-resolution timer
+static inline struct timespec timer_start(){
+    struct timespec start_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    return start_time;
+}
+
+// call this function to end a timer, returning nanoseconds elapsed as a long
+static inline long timer_end(struct timespec start_time){
+    struct timespec end_time;
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    long diffInNanos = (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
+    return diffInNanos;
+}
+
+void* bench(void *arg){
+	return NULL;
+}
+
+void perf(){
+	long millis = 0;
+	long opers = 0;
+	for(;;++opers){
+		struct timespec ts = timer_start();
+		assemble("jmp .");
+		long diff = timer_end(ts);
+		long diff_millis = diff / 1e6;
+		millis += diff_millis;
+		if(millis >= 1000){
+			fprintf(stderr, "%ld ops/s\n", opers);
+			millis = 0;
+			opers = 0;
+		}
+	}
+}
+
 int main(int argc, char *argv[]){
 	UNUSED(argc);
 	UNUSED(argv);
@@ -322,10 +376,7 @@ int main(int argc, char *argv[]){
 		assemble(&buffer[0]);
 	}
 #else
-	assemble("mp .");
-	assemble("jmp .");
-	//assemble("jmp .");
-	//assemble("xor eax, eax");
+	perf();
 #endif
 
 #ifdef WIN32

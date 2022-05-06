@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 CC=gcc
 
-if [[ "$@" == *"gas/symbols.c"* ]]; then
+patch_remove_static(){
+	local symbol="$1"
+	echo -ne "s/static(.*${symbol})/\$1/g"
+}
+
+if [[ "$@" == *"gas/symbols.c" ]]; then
 	file_path="${@: -1}"
 	# exclude last argument
 	args="${@:1:$(($#-1))}"
-	#set -- "${@:1:$(($#-1))}"
 
 	exec ${CC} ${args} -x c - < <(
 		cat "${file_path}"
@@ -16,14 +20,24 @@ if [[ "$@" == *"gas/symbols.c"* ]]; then
 		}
 		EOF
 	)
-elif [[ "$@" == *"gas/config/tc-riscv.c"* ]]; then
+elif [[ "$@" == *"gas/config/tc-riscv.c" ]]; then
 	file_path="${@: -1}"
 	# exclude last argument
 	args="${@:1:$(($#-1))}"
-	#set -- "${@:1:$(($#-1))}"
 
 	exec ${CC} ${args} -x c - < <(
-		cat "${file_path}" | perl -pe 's/static(.*riscv_subsets)/$1/g'
+		p="$(patch_remove_static "riscv_subsets")"
+		cat "${file_path}" | perl -pe "${p}"
+	)
+elif [[ "$@" == *"gas/config/tc-ppc.c" ]]; then
+	file_path="${@: -1}"
+	# exclude last argument
+	args="${@:1:$(($#-1))}"
+
+	exec ${CC} ${args} -x c - < <(
+		p="$(patch_remove_static "ppc_hash")"
+		p="${p};$(patch_remove_static "ppc_macro_hash")"
+		cat "${file_path}" | perl -pe "${p}"
 	)
 else
 	exec ${CC} "$@"
