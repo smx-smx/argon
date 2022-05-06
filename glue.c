@@ -30,6 +30,20 @@ extern void argon_malloc_gc();
 
 static struct elf_obj_tdata fake_tdata;
 
+void *argon_gcmalloc(size_t sz){
+	// in binutils context, malloc is overridden by wrapper.cpp
+	return malloc(sz);
+}
+
+void *argon_gczalloc(size_t sz){
+	void *mem = argon_gcmalloc(sz);
+	if(mem == NULL){
+		return NULL;
+	}
+	memset(mem, 0x00, sz);
+	return mem;
+}
+
 void argon_init_gas(){
 	symbol_begin();
 	subsegs_begin();
@@ -72,6 +86,9 @@ void argon_init_gas(){
 	bfd_set_section_alignment(text_section, 0);
 
 
+	// set fake output_elf_obj_tdata
+	fake_tdata.o = argon_gczalloc(sizeof(struct output_elf_obj_tdata));
+
 	// set fake ELF data
 	elf_tdata(stdoutput) = &fake_tdata;
 }
@@ -112,9 +129,4 @@ void argon_reset_gas(){
 	bfd_und_section_ptr->userdata = NULL;
 
 	CLEAR(fake_tdata);
-}
-
-void *argon_gcmalloc(size_t sz){
-	// in binutils context, malloc is overridden by wrapper.cpp
-	return malloc(sz);
 }
