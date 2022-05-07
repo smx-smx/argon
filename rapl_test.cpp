@@ -10,7 +10,10 @@
  * @copyright Copyright (c) Stefano Moioli 2022
  */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -33,13 +36,27 @@ static HMODULE gas;
 static void *gas;
 #endif
 
-static void *resolveSymbol(char *sym){
+#ifdef __cplusplus
+template<typename T>
+static void resolveSymbol(const char *sym, T& outSym){
+	void *psym = NULL;
+#ifdef WIN32
+	psym = (void *)GetProcAddress(gas, sym);
+#else
+	psym = dlsym(gas, sym);
+#endif
+
+	outSym = reinterpret_cast<T>(psym);
+}
+#else
+static void *resolveSymbol(const char *sym){
 #ifdef WIN32
 	return (void *)GetProcAddress(gas, sym);
 #else
 	return dlsym(gas, sym);
 #endif
 }
+#endif
 
 #define BINUTILS_IMPORT_DECL
 #include "binutils_imports.h"
@@ -105,8 +122,17 @@ int assemble(const char *buffer){
 
 #include "binutils_imports.h"
 
+#ifdef __cplusplus
+#define GVAR(T, sym) \
+	T sym; \
+	resolveSymbol(#sym, sym)
+#define GFUNC(ret_type, function, ...) \
+	ret_type(*function)(__VA_ARGS__); \
+	resolveSymbol(#function, function)
+#else
 #define GVAR(T, sym) T sym = (T)resolveSymbol(#sym)
 #define GFUNC(ret_type, function, ...) ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
+#endif
 
 	argon_reset_gas();
 
@@ -114,7 +140,7 @@ int assemble(const char *buffer){
 	//breakpoint_me();
 
 	#define MEM_SIZE 1024 * 1024
-	unsigned char *mem = argon_bfd_data_alloc(MEM_SIZE);
+	unsigned char *mem = (unsigned char *)argon_bfd_data_alloc(MEM_SIZE);
 
 	*stdoutput = bfd_openw("dummy", "default");
 	if(*stdoutput == NULL){

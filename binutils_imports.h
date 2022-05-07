@@ -3,10 +3,16 @@
 
 #define GFUNC(ret_type, function, ...) \
 	ret_type(*function)(__VA_ARGS__) = NULL
-#else
+#else // BINUTILS_IMPORT_DECL
 
+#ifdef __cplusplus
+#define GVAR(T, sym) resolveSymbol(#sym, sym)
+#define GFUNC(ret_type, function, ...) resolveSymbol(#function, function)
+#else // __cplusplus
 #define GVAR(T, sym) sym = (T)resolveSymbol(#sym)
 #define GFUNC(ret_type, function, ...) function = resolveSymbol(#function)
+#endif
+
 #endif
 
 GFUNC(int, md_parse_option, int c, const char *arg);

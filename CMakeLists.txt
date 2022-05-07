@@ -203,6 +203,6 @@ add_custom_target(copy_libgas
 )
 add_dependencies(copy_libgas build_gas_shared)
 
-add_executable(rapl_test rapl_test.c)
+add_executable(rapl_test rapl_test.cpp)
 target_link_libraries(rapl_test PRIVATE dl)
 add_dependencies(rapl_test copy_libgas)
