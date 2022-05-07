@@ -36,6 +36,18 @@ void *argon_gcmalloc(size_t sz){
 	return malloc(sz);
 }
 
+static char *fake_line_buffer = NULL;
+
+extern void *__real_malloc(size_t sz);
+extern void __real_free(void *ptr);
+
+void *argon_malloc(size_t sz){
+	return __real_malloc(sz);
+}
+void argon_free(void *ptr){
+	__real_free(ptr);
+}
+
 void *argon_gczalloc(size_t sz){
 	void *mem = argon_gcmalloc(sz);
 	if(mem == NULL){
@@ -47,6 +59,48 @@ void *argon_gczalloc(size_t sz){
 
 void argon_clear_htab(htab_t *htab){
 	memset(htab, 0x00, sizeof(*htab));
+}
+
+extern struct htab *po_hash;
+struct po_entry
+{
+  const char *poc_name;
+  const pseudo_typeS *pop;
+};
+
+typedef struct po_entry po_entry_t;
+
+static const pseudo_typeS *
+argon_po_entry_find (const char *poc_name){
+  po_entry_t needle = { poc_name, NULL };
+  po_entry_t *entry = htab_find (po_hash, &needle);
+  return entry != NULL ? entry->pop : NULL;
+}
+
+int argon_call_pseudo(const char *op, char *args){
+	pseudo_typeS *entry = argon_po_entry_find(op);
+	if(entry == NULL){
+		return -1;
+	}
+
+	char *args_copy = NULL;
+
+	// set line pointer to op arguments
+	if(args == NULL){
+		input_line_pointer = fake_line_buffer;
+	} else {
+		int n = strlen(args) + 1;
+		args_copy = argon_malloc(n);
+		memcpy(args_copy, args, n);
+
+		input_line_pointer = args_copy;
+	}
+	entry->poc_handler(entry->poc_val);
+
+	if(args_copy != NULL){
+		argon_free(args_copy);
+	}
+	return 0;
 }
 
 void argon_init_gas(){
@@ -96,6 +150,8 @@ void argon_init_gas(){
 
 	// set fake ELF data
 	elf_tdata(stdoutput) = &fake_tdata;
+
+	fake_line_buffer = argon_gczalloc(32);
 }
 
 void argon_reset_gas(){
@@ -134,23 +190,9 @@ void argon_reset_gas(){
 	bfd_und_section_ptr->userdata = NULL;
 
 	CLEAR(fake_tdata);
+
+	fake_line_buffer = NULL;
 }
-
-
-static void argon_call_pseudo_table(const pseudo_typeS *table, const char *name){
-	for(const pseudo_typeS *p = table; p->poc_name != NULL; p++){
-		if(strcmp(p->poc_name, name) != 0) continue;
-		if(p->poc_handler != NULL){
-			p->poc_handler(p->poc_val);
-		}
-		break;
-	}
-}
-
-void argon_call_pseudo(const char *name){
-	argon_call_pseudo_table(md_pseudo_table, name);
-}
-
 
 int argon_set_option(const char *optname, const char *value){
 	for(struct option *p = md_longopts

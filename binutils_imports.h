@@ -31,7 +31,7 @@ GFUNC(void, argon_init_gas);
 GFUNC(void, argon_reset_gas);
 GFUNC(void *, argon_gcmalloc);
 GFUNC(void, argon_clear_htab, void *htab);
-GFUNC(void, argon_call_pseudo, const char *name);
+GFUNC(void, argon_call_pseudo, const char *name, const char *args);
 GFUNC(int, argon_set_option, const char *optname, const char *value);
 
 #undef GVAR

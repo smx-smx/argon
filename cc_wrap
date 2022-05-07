@@ -20,6 +20,15 @@ if [[ "$@" == *"gas/symbols.c" ]]; then
 		}
 		EOF
 	)
+elif [[ "$@" == *"gas/read.c" ]]; then
+	file_path="${@: -1}"
+	# exclude last argument
+	args="${@:1:$(($#-1))}"
+
+	exec ${CC} ${args} -x c - < <(
+		p="$(patch_remove_static "po_hash")"
+		cat "${file_path}" | perl -pe "${p}"
+	)
 elif [[ "$@" == *"gas/config/tc-riscv.c" ]]; then
 	file_path="${@: -1}"
 	# exclude last argument

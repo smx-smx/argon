@@ -101,6 +101,8 @@ void breakpoint_me(){
 }
 
 int assemble(const char *buffer){
+	if(strlen(buffer) < 1) return -1;
+
 #include "binutils_imports.h"
 
 #define GVAR(T, sym) T sym = (T)resolveSymbol(#sym)
@@ -137,8 +139,8 @@ int assemble(const char *buffer){
 		argon_set_option("mnaked-reg", NULL);
 		
 		// switch to CODE64 mode
-		//call_pseudo("code64");
-		argon_call_pseudo("code32");
+		//argon_call_pseudo("code64", NULL);
+		argon_call_pseudo("code32", NULL);
 	}
 
 	if(bfd_mips_arch != NULL){
