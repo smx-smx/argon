@@ -103,46 +103,25 @@ add_custom_target(build_gas_static
 )
 add_dependencies(build_gas_static build_gas)
 
-set(BINUTILS_EXTERNAL_CFLAGS
-	-I${binutils_BINARY_DIR}/bfd
-	-I${binutils_BINARY_DIR}/gas
-	-I${binutils_SOURCE_DIR}/include
-	-I${binutils_SOURCE_DIR}
-	-I${binutils_SOURCE_DIR}/gas
-	-I${binutils_SOURCE_DIR}/gas/config
+# using SHARED implies position-independent code
+add_library(binutils_glue SHARED
+	glue.c
+	wrappers.cpp
 )
-
-## build binutils glue
-add_custom_command(
-	OUTPUT ${binutils_BINARY_DIR}/glue.o
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/glue.c
-	COMMAND ${CMAKE_C_COMPILER}
-		${BINUTILS_CFLAGS}
-		${BINUTILS_EXTERNAL_CFLAGS}
-		-c ${CMAKE_CURRENT_SOURCE_DIR}/glue.c
-		-o ${binutils_BINARY_DIR}/glue.o
+target_include_directories(binutils_glue PRIVATE
+	${binutils_BINARY_DIR}/bfd
+	${binutils_BINARY_DIR}/gas
+	${binutils_SOURCE_DIR}/include
+	${binutils_SOURCE_DIR}
+	${binutils_SOURCE_DIR}/gas
+	${binutils_SOURCE_DIR}/gas/config
 )
-add_custom_target(build_glue
-	DEPENDS ${binutils_BINARY_DIR}/glue.o
-	COMMENT "building binutils glue"
+set_target_properties(binutils_glue
+	PROPERTIES
+		# don't actually create a .a/.so (we will use the .o files later)
+		RULE_LAUNCH_LINK "${CMAKE_COMMAND} -E true"
 )
-add_dependencies(build_glue build_gas)
-
-## build malloc wrappers
-add_custom_command(
-	OUTPUT ${binutils_BINARY_DIR}/wrappers.o
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/wrappers.cpp 
-	COMMAND ${CMAKE_CXX_COMPILER}
-		${BINUTILS_CFLAGS}
-		${BINUTILS_EXTERNAL_CFLAGS}
-		-c ${CMAKE_CURRENT_SOURCE_DIR}/wrappers.cpp
-		-o ${binutils_BINARY_DIR}/wrappers.o
-)
-add_custom_target(build_wrappers
-	DEPENDS ${binutils_BINARY_DIR}/wrappers.o
-	COMMENT "building malloc wrappers"
-)
-add_dependencies(build_wrappers build_gas)
+add_dependencies(binutils_glue build_gas)
 
 set(OPCODES_OBJECTS opcodes/*.o)
 
@@ -153,6 +132,7 @@ endif()
 ## build libgas shared library
 add_custom_target(build_gas_shared
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
+	COMMAND_EXPAND_LISTS
 	COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS}
 		-shared
 		# GC malloc hooks
@@ -171,7 +151,7 @@ add_custom_target(build_gas_shared
 		-Wl,--wrap=_bfd_real_fopen
 		-Wl,--wrap=fclose
 		# add glue and wrappers
-		glue.o wrappers.o
+		$<TARGET_OBJECTS:binutils_glue>
 		gas/*.o
 		gas/config/*.o
 		${OPCODES_OBJECTS}
@@ -182,8 +162,7 @@ add_custom_target(build_gas_shared
 		-o gas/${GAS_SHARED_LIB_NAME}
 )
 add_dependencies(build_gas_shared build_gas)
-add_dependencies(build_gas_shared build_glue)
-add_dependencies(build_gas_shared build_wrappers)
+add_dependencies(build_gas_shared binutils_glue)
 
 add_library(libgas SHARED IMPORTED)
 set_property(
