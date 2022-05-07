@@ -11,7 +11,6 @@
  */
 #include "as.h"
 #include "subsegs.h"
-#include "symbols.h"
 #include "obstack.h"
 
 #include <stdlib.h>
@@ -138,8 +137,8 @@ void argon_reset_gas(){
 }
 
 
-static void argon_call_pseudo_table(pseudo_typeS *table, const char *name){
-	for(pseudo_typeS *p = table; p->poc_name != NULL; p++){
+static void argon_call_pseudo_table(const pseudo_typeS *table, const char *name){
+	for(const pseudo_typeS *p = table; p->poc_name != NULL; p++){
 		if(strcmp(p->poc_name, name) != 0) continue;
 		if(p->poc_handler != NULL){
 			p->poc_handler(p->poc_val);

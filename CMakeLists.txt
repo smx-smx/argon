@@ -144,6 +144,12 @@ add_custom_target(build_wrappers
 )
 add_dependencies(build_wrappers build_gas)
 
+set(OPCODES_OBJECTS opcodes/*.o)
+
+if("${TARGET}" MATCHES "avr-.*")
+	set(OPCODES_OBJECTS "")
+endif()
+
 ## build libgas shared library
 add_custom_target(build_gas_shared
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
@@ -168,7 +174,7 @@ add_custom_target(build_gas_shared
 		glue.o wrappers.o
 		gas/*.o
 		gas/config/*.o
-		opcodes/*.o
+		${OPCODES_OBJECTS}
 		bfd/*.o
 		libiberty/*.o
 		zlib/*.o
