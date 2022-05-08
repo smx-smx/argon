@@ -24,6 +24,7 @@ if(NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+#add_compile_options(-Wall)
 
 set(BINUTILS_CFLAGS
 	-fPIC
@@ -107,6 +108,7 @@ add_dependencies(build_gas_static build_gas)
 add_library(binutils_glue SHARED
 	glue.c
 	wrappers.cpp
+	dynapi.c
 )
 target_include_directories(binutils_glue PRIVATE
 	${binutils_BINARY_DIR}/bfd

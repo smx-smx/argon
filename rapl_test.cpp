@@ -24,6 +24,7 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <readline/readline.h>
 #endif
 
 #include <sys/stat.h>
@@ -111,8 +112,6 @@ int launchDebugger() {
 }
 #endif
 
-static void *gas_handle = NULL;
-
 void breakpoint_me(){
 	puts("");
 }
@@ -120,119 +119,22 @@ void breakpoint_me(){
 int assemble(const char *buffer){
 	if(strlen(buffer) < 1) return -1;
 
-#include "binutils_imports.h"
-
-#ifdef __cplusplus
-#define GVAR(T, sym) \
-	T sym; \
-	resolveSymbol(#sym, sym)
-#define GFUNC(ret_type, function, ...) \
-	ret_type(*function)(__VA_ARGS__); \
-	resolveSymbol(#function, function)
-#else
-#define GVAR(T, sym) T sym = (T)resolveSymbol(#sym)
-#define GFUNC(ret_type, function, ...) ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
-#endif
-
-	argon_reset_gas();
+	#include "binutils_imports.h"
+	uint8_t *mem = argon_init_gas(1024 * 1024);
 
 	// $DEBUG
 	//breakpoint_me();
 
-	#define MEM_SIZE 1024 * 1024
-	unsigned char *mem = (unsigned char *)argon_bfd_data_alloc(MEM_SIZE);
-
-	*stdoutput = bfd_openw("dummy", "default");
-	if(*stdoutput == NULL){
-		fprintf(stderr, "bfd_openw() failed\n");
-		return 1;
-	}
-
-	argon_init_gas();
-	
-	//md_parse_option('V', NULL);
-
-	GVAR(void *, bfd_i386_arch);
-	GVAR(void *, bfd_mips_arch);
-	GVAR(void *, bfd_riscv_arch);
-	GVAR(void *, bfd_rs6000_arch); // PPC
-
-	if(bfd_i386_arch != NULL){
-		argon_set_option("64", NULL);
-		argon_set_option("march", "generic64");
-		argon_set_option("mmnemonic", "intel");
-		argon_set_option("msyntax", "intel");
-		argon_set_option("mnaked-reg", NULL);
-		
-		// switch to CODE64 mode
-		//argon_call_pseudo("code64", NULL);
-		argon_call_pseudo("code32", NULL);
-	}
-
-	if(bfd_mips_arch != NULL){
-		argon_set_option("mips5", NULL);
-		argon_set_option("mips32", NULL);
-
-		GVAR(int *, mips_flag_mdebug);
-		*mips_flag_mdebug = 0;
-	}
-
-	if(bfd_rs6000_arch != NULL){
-		// NOTE: requires patch
-		GVAR(void *, ppc_hash);
-		GVAR(void *, ppc_macro_hash);
-
-		if(ppc_hash != NULL){
-			argon_clear_htab(ppc_hash);
-		}
-		if(ppc_macro_hash != NULL){
-			argon_clear_htab(ppc_macro_hash);
-		}
-	}
-	
-	if(bfd_riscv_arch != NULL){
-		GFUNC(void, riscv_after_parse_args);
-		GFUNC(void, riscv_pop_insert);
-
-		// NOTE: requires patch
-		GVAR(void **, riscv_subsets);
-		if(riscv_subsets){
-			*riscv_subsets = NULL;
-		}
-
-		// inits riscv_subsets
-		riscv_after_parse_args();
-	}
-
-	md_begin();
-	
-	/**
-	 * IMPORTANT: md_assemble modifies the input line
-	 * so we must always make a copy 
-	 */
-	char *line = strdup(buffer);
-	{
-		// this writes in the current fragment
-		md_assemble(line);
-		free(line);
-		line = NULL;
-	}
-
-	DPRINTF("%p %p %p\n", _frchain_now->frch_root, _frchain_now->frch_last, _frchain_now->frch_next);
-	DPUTS("--");
-
-	write_object_file();
-
-	if(md_end != NULL) md_end();
-
-	bfd_close(*stdoutput);
+	argon_assemble(buffer);
 
 	size_t written = argon_bfd_data_written();
 	for(size_t i=0; i<written; i++){
 		printf("%02hhx ", mem[i]);
 	}
-	puts("");	
+	puts("");
+	free(mem);
 
+	argon_reset_gas();
 	return 0;
 }
 

@@ -78,7 +78,7 @@ argon_po_entry_find (const char *poc_name){
 }
 
 int argon_call_pseudo(const char *op, char *args){
-	pseudo_typeS *entry = argon_po_entry_find(op);
+	const pseudo_typeS *entry = argon_po_entry_find(op);
 	if(entry == NULL){
 		return -1;
 	}
@@ -103,7 +103,7 @@ int argon_call_pseudo(const char *op, char *args){
 	return 0;
 }
 
-void argon_init_gas(){
+void _argon_init_gas(){
 	symbol_begin();
 	subsegs_begin();
 	// initializes obstacks
@@ -155,6 +155,11 @@ void argon_init_gas(){
 }
 
 void argon_reset_gas(){
+	if(stdoutput != NULL){
+		bfd_close(stdoutput);
+		stdoutput = NULL;
+	}
+
 	bfd_cache_close_all();
 	argon_malloc_gc();
 

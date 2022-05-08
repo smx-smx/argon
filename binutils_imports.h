@@ -1,8 +1,15 @@
 #ifdef BINUTILS_IMPORT_DECL
-#define GVAR(T, sym) T sym = (T)0
+
+#ifdef BINUTILS_IMPORT_GLOBAL
+#define BINUTILS_IMPORT_STATIC
+#else
+#define BINUTILS_IMPORT_STATIC static
+#endif
+
+#define GVAR(T, sym) BINUTILS_IMPORT_STATIC T sym = (T)0
 
 #define GFUNC(ret_type, function, ...) \
-	ret_type(*function)(__VA_ARGS__) = NULL
+	BINUTILS_IMPORT_STATIC ret_type(*function)(__VA_ARGS__) = NULL
 #else // BINUTILS_IMPORT_DECL
 
 #ifdef __cplusplus
@@ -33,7 +40,12 @@ GFUNC(void *, argon_tc_pseudo_ops);
 GVAR(void **, stdoutput);
 
 /** from glue.c **/
-GFUNC(void, argon_init_gas);
+#ifdef ARGON_DYNINIT
+GFUNC(void, _argon_init_gas);
+#else
+GFUNC(unsigned char *, argon_init_gas, size_t mem_size);
+GFUNC(void, argon_assemble, const char *);
+#endif
 GFUNC(void, argon_reset_gas);
 GFUNC(void *, argon_gcmalloc);
 GFUNC(void, argon_clear_htab, void *htab);
@@ -42,3 +54,4 @@ GFUNC(int, argon_set_option, const char *optname, const char *value);
 
 #undef GVAR
 #undef GFUNC
+#undef BINUTILS_IMPORT_STATIC

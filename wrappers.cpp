@@ -189,10 +189,9 @@ void argon_malloc_gc(){
 	g_allocations.clear();
 }
 
-#pragma region fopen_hooks
 void *argon_bfd_data_alloc(size_t size){
-	// allocate through the GC malloc
-	::bfd_data = static_cast<uint8_t *>(__wrap_malloc(size));
+	// allocate through the real malloc
+	::bfd_data = static_cast<uint8_t *>(__real_malloc(size));
 	if(bfd_data != nullptr){
 		::bfd_data_size = size;
 	}
@@ -219,7 +218,4 @@ FILE *__wrap__bfd_real_fopen (const char *filename, const char *modes){
 	(void)modes;
 	return FAKE_OUTPUT_HANDLE;
 }
-
-#pragma endregion
-
 }
