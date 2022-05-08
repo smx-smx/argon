@@ -23,6 +23,8 @@
 #include <dlfcn.h>
 #endif
 
+#include "argon.h"
+
 #ifdef WIN32
 static HMODULE gas;
 #else
@@ -42,7 +44,7 @@ static void *resolveSymbol(const char *sym){
 #include "binutils_imports.h"
 #undef BINUTILS_IMPORT_DECL
 
-uint8_t *argon_init_gas(size_t bufferSize){
+uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 	#include "binutils_imports.h"
 	#ifdef __cplusplus
 	#define GVAR(T, sym) \
@@ -56,9 +58,12 @@ uint8_t *argon_init_gas(size_t bufferSize){
 	#define GFUNC(ret_type, function, ...) ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
 	#endif
 
-	argon_reset_gas();
+	argon_reset_gas(flags);
 
-	uint8_t *mem = (uint8_t *)argon_bfd_data_alloc(bufferSize);
+	uint8_t *mem = NULL;
+	if((flags & ARGON_KEEP_BUFFER) != ARGON_KEEP_BUFFER){
+		mem = (uint8_t *)argon_bfd_data_alloc(bufferSize);
+	}
 
 	*stdoutput = bfd_openw("dummy", "default");
 	if(*stdoutput == NULL){
@@ -145,6 +150,11 @@ void argon_assemble(const char *text){
 		line = NULL;
 	}
 
-	write_object_file();
+	/**
+	 * we write immediately, to capture the output
+	 * intermediate output is complicated to achieve,
+	 * due to certain operations being delayed due to relaxation
+	 **/
 	if(md_end != NULL) md_end();
+	write_object_file();
 }

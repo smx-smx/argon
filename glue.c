@@ -154,13 +154,16 @@ void _argon_init_gas(){
 	fake_line_buffer = argon_gczalloc(32);
 }
 
-void argon_reset_gas(){
+
+#define HAS_FLAG(x, f) (( (x) & f) == f)
+
+void argon_reset_gas(unsigned flags){
 	if(stdoutput != NULL){
 		bfd_close(stdoutput);
 		stdoutput = NULL;
+		bfd_cache_close_all();
 	}
 
-	bfd_cache_close_all();
 	argon_malloc_gc();
 
 	now_seg = NULL;

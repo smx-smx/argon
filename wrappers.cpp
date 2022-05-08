@@ -17,6 +17,7 @@
 #include <cstring>
 #include <algorithm>
 
+//#define DEBUG
 #ifdef DEBUG
 #include <unordered_map>
 struct alloc_info {
@@ -32,6 +33,8 @@ struct alloc_info make_info(size_t size){
 	info.bt.push_back(__builtin_return_address(0));
 	info.bt.push_back(__builtin_return_address(1));
 	info.bt.push_back(__builtin_return_address(2));
+	info.bt.push_back(__builtin_return_address(3));
+	info.bt.push_back(__builtin_return_address(4));
 	return info;
 }
 #else
@@ -85,9 +88,14 @@ bool __wrap__bfd_elf_set_section_contents (
 		return true;
 	}
 
-	if(offset > bfd_data_size) return false;
-	if(offset + count > bfd_data_size) return false;
-	std::memcpy(&::bfd_data[offset], location, count);
+	off_t write_begin = bfd_data_count + offset;
+	if(write_begin >= bfd_data_size) return false;
+
+	off_t write_end = write_begin + count;
+	if(write_end >= bfd_data_size){
+		count -= (write_end - bfd_data_size);
+	}
+	std::memcpy(&::bfd_data[write_begin], location, count);
 	::bfd_data_count += count;
 	return true;
 }
@@ -179,8 +187,9 @@ void argon_malloc_gc(){
 	#ifdef DEBUG
 		void *ptr = item.first;
 		struct alloc_info caller = item.second;
-		printf(">> gc free %p (%p -> %p -> %p)\n", ptr,
-			caller.bt[0], caller.bt[1], caller.bt[2]);
+		printf(">> gc free %p (%p -> %p -> %p -> %p -> %p)\n", ptr,
+			caller.bt[0], caller.bt[1], caller.bt[2],
+			caller.bt[3], caller.bt[4]);
 	#else
 		void *ptr = item;
 	#endif
@@ -201,6 +210,22 @@ void *argon_bfd_data_alloc(size_t size){
 
 size_t argon_bfd_data_written(){
 	return ::bfd_data_count;
+}
+
+void argon_fseek(long offset, int whence){
+	size_t p = ::bfd_data_count;
+	switch(whence){
+		case SEEK_SET:
+			p = offset;
+			break;
+		case SEEK_END:
+			p += ::bfd_data_size + offset;
+			break;
+		case SEEK_CUR:
+			p += offset;
+			break;
+	}
+	::bfd_data_count = p;
 }
 
 #define FAKE_OUTPUT_HANDLE (FILE *)(-2)

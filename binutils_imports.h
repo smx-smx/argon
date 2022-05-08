@@ -43,10 +43,12 @@ GVAR(void **, stdoutput);
 #ifdef ARGON_DYNINIT
 GFUNC(void, _argon_init_gas);
 #else
-GFUNC(unsigned char *, argon_init_gas, size_t mem_size);
+GFUNC(unsigned char *, argon_init_gas, size_t mem_size, unsigned flags);
 GFUNC(void, argon_assemble, const char *);
+GFUNC(void, argon_assemble_end);
+GFUNC(void, argon_fseek, long offset, int whence);
 #endif
-GFUNC(void, argon_reset_gas);
+GFUNC(void, argon_reset_gas, unsigned flags);
 GFUNC(void *, argon_gcmalloc);
 GFUNC(void, argon_clear_htab, void *htab);
 GFUNC(void, argon_call_pseudo, const char *name, const char *args);

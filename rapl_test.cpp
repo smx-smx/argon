@@ -24,10 +24,9 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
-#include <readline/readline.h>
 #endif
 
-#include <sys/stat.h>
+#include "argon.h"
 
 #define UNUSED(x) ((void)(x))
 
@@ -116,28 +115,6 @@ void breakpoint_me(){
 	puts("");
 }
 
-int assemble(const char *buffer){
-	if(strlen(buffer) < 1) return -1;
-
-	#include "binutils_imports.h"
-	uint8_t *mem = argon_init_gas(1024 * 1024);
-
-	// $DEBUG
-	//breakpoint_me();
-
-	argon_assemble(buffer);
-
-	size_t written = argon_bfd_data_written();
-	for(size_t i=0; i<written; i++){
-		printf("%02hhx ", mem[i]);
-	}
-	puts("");
-	free(mem);
-
-	argon_reset_gas();
-	return 0;
-}
-
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -166,7 +143,12 @@ void perf(){
 	long opers = 0;
 	for(;;++opers){
 		struct timespec ts = timer_start();
-		assemble("jmp .");
+		{
+			argon_init_gas(0, ARGON_KEEP_BUFFER);
+			argon_fseek(0, SEEK_SET);
+			argon_assemble("jmp .");
+			argon_reset_gas(ARGON_RESET_FULL);
+		}
 		long diff = timer_end(ts);
 		long diff_millis = diff / 1e6;
 		millis += diff_millis;
@@ -201,19 +183,38 @@ int main(int argc, char *argv[]){
 		fprintf(stderr, "%s\n", dlerror());
 		return 1;
 	}
+	#include "binutils_imports.h"
+
+	uint8_t *mem = argon_init_gas(1024 * 1024, ARGON_RESET_FULL);
 
 #if 1
 	char buffer[128] = {0};
 	while(!feof(stdin)){
+		buffer[0] = '\0';
+		argon_init_gas(0, ARGON_KEEP_BUFFER);
+
 		fgets(buffer, sizeof(buffer), stdin);
 		char *p = strrchr(buffer, '\n');
 		if(p) *p = '\0';
 
+		if(strlen(buffer) < 1){
+			continue;
+		}
 		if(!strcmp(buffer, ".quit")){
 			break;
 		}
-		assemble(&buffer[0]);
+		argon_assemble(buffer);
+
+		size_t written = argon_bfd_data_written();
+		for(size_t i=0; i<written; i++){
+			printf("%02hhx ", mem[i]);
+		}
+		puts("");
+
+		argon_reset_gas(ARGON_RESET_FULL);
 	}
+	free(mem);
+
 #else
 	perf();
 #endif
