@@ -126,6 +126,7 @@ static inline long timer_end(struct timespec start_time){
     return diffInNanos;
 }
 
+//#define PERF
 #ifdef PERF
 void perf(){
 	double millis = 0;

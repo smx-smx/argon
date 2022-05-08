@@ -29,13 +29,14 @@ if(WIN32)
 	add_compile_options(-Wl,--export-all-symbols)
 endif()
 
-set(BINUTILS_CFLAGS
-	-fPIC
-)
-
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-	list(APPEND BINUTILS_CFLAGS -g -ggdb3)
+	separate_arguments(BINUTILS_CFLAGS NATIVE_COMMAND "${CMAKE_C_FLAGS_DEBUG}")
+	list(APPEND BINUTILS_CFLAGS -ggdb3)
+elseif(CMAKE_BUILD_TYPE MATCHES Release)
+	separate_arguments(BINUTILS_CFLAGS NATIVE_COMMAND "${CMAKE_C_FLAGS_RELEASE}")
 endif()
+
+list(APPEND BINUTILS_CFLAGS -fPIC)
 
 macro(static_lib_name name var)
 	set(${var} ${CMAKE_STATIC_LIBRARY_PREFIX}${name}${CMAKE_STATIC_LIBRARY_SUFFIX})
@@ -59,13 +60,19 @@ if(NOT DEFINED TARGET)
 	set(TARGET "x86_64-unknown-linux")
 endif()
 
+set(AUTOTOOLS_ENV "")
+list(APPEND AUTOTOOLS_ENV
+	REAL_CC="${CMAKE_C_COMPILER}"
+	CC="${CMAKE_SOURCE_DIR}/cc_wrap"
+	CFLAGS="${BINUTILS_CFLAGS}"
+	MAKEINFO=true
+)
+
 add_custom_command(
 	OUTPUT ${binutils_BINARY_DIR}/config.status
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
 	COMMAND ${CMAKE_COMMAND} -E env 
-		REAL_CC="${CMAKE_C_COMPILER}"
-		CC="${CMAKE_SOURCE_DIR}/cc_wrap"
-		CFLAGS="${BINUTILS_CFLAGS}"
+		${AUTOTOOLS_ENV}
 		${binutils_SOURCE_DIR}/configure 
 		--disable-nls
 		--prefix=${binutils_BINARY_DIR}
@@ -84,8 +91,7 @@ add_custom_target(configure_binutils
 add_custom_target(build_gas
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
 	COMMAND ${CMAKE_COMMAND} -E env
-	REAL_CC="${CMAKE_C_COMPILER}"
-	MAKEINFO=true
+	${AUTOTOOLS_ENV}
 	make -j${NPROC} all-gas
 	COMMAND make install-gas
 	COMMENT "make install-gas"
@@ -96,8 +102,7 @@ add_dependencies(build_gas configure_binutils)
 add_custom_target(build_opcodes
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
 	COMMAND ${CMAKE_COMMAND} -E env
-	REAL_CC="${CMAKE_C_COMPILER}"
-	MAKEINFO=true
+	${AUTOTOOLS_ENV}
 	make -j${NPROC} all-opcodes
 	COMMAND make install-opcodes
 	COMMENT "make install-opcodes"
@@ -210,7 +215,7 @@ if(UNIX AND NOT CYGWIN)
 endif()
 if(WIN32)
 	# only required for the clock_gettime perf test
-	#target_link_libraries(rapl_test PRIVATE pthread)
+	target_link_libraries(rapl_test PRIVATE pthread)
 	target_compile_options(rapl_test PRIVATE -static)
 endif()
 add_dependencies(rapl_test copy_libgas)

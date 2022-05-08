@@ -289,17 +289,18 @@ static void pool_clear(pool_t &pool){
  * @brief Frees all the memory allocations that haven't been freed 
  */
 void argon_malloc_gc(int pool_selector){
+	/*
+	printf("init_pool: %d, live_pool: %d\n",
+		init_pool.size(),
+		live_pool.size());
+	*/
+
 	if(HAS_FLAG(pool_selector, ARGON_POOL_LIVE)){
 		pool_clear(live_pool);
 	}
 	if(HAS_FLAG(pool_selector, ARGON_POOL_INIT)){
 		pool_clear(init_pool);
 	}
-	/*
-	printf("init_pool: %d, live_pool: %d\n",
-		init_pool.size(),
-		live_pool.size());
-	*/
 }
 
 void *argon_bfd_data_alloc(size_t size){
