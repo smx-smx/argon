@@ -77,7 +77,8 @@ enum argon_arch {
 	ARCH_I386,
 	ARCH_MIPS,
 	ARCH_RISCV,
-	ARCH_PPC
+	ARCH_PPC,
+	ARCH_Z80
 };
 
 static int argon_arch_detect(){
@@ -92,6 +93,9 @@ static int argon_arch_detect(){
 
 	GVAR(void *, bfd_rs6000_arch); // PPC
 	if(bfd_rs6000_arch) return ARCH_PPC;
+
+	GVAR(void *, bfd_z80_arch);
+	if(bfd_z80_arch) return ARCH_Z80;
 
 	return ARCH_UNKNOWN;
 }
@@ -163,6 +167,11 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 
 				// inits riscv_subsets
 				riscv_after_parse_args();
+				break;
+			case ARCH_Z80:
+				// enable all instructions
+				// $FIXME: some instructions (e.g. dec) complain about illegal operand
+				argon_set_option("full", NULL);
 				break;
 		}
 

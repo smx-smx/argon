@@ -187,7 +187,7 @@ int main(int argc, char *argv[]){
 	uint8_t *mem = argon_init_gas(1024 * 1024,
 		ARGON_RESET_FULL | ARGON_FAST_INIT);
 
-#if 0
+#if 1
 	char buffer[128] = {0};
 	while(!feof(stdin)){
 		buffer[0] = '\0';
