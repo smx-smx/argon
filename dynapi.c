@@ -61,7 +61,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 	argon_reset_gas(flags);
 
 	uint8_t *mem = NULL;
-	if((flags & ARGON_KEEP_BUFFER) != ARGON_KEEP_BUFFER){
+	if(!HAS_FLAG(flags, ARGON_KEEP_BUFFER)){
 		mem = (uint8_t *)argon_bfd_data_alloc(bufferSize);
 	}
 
@@ -72,7 +72,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 		return NULL;
 	}
 
-	_argon_init_gas();
+	_argon_init_gas(flags);
 	
 	//md_parse_option('V', NULL);
 
@@ -84,14 +84,14 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 	/** set i386 defaults **/
 	if(bfd_i386_arch != NULL){
 		argon_set_option("64", NULL);
-		argon_set_option("march", "generic64");
+		//argon_set_option("march", "generic64");
 		argon_set_option("mmnemonic", "intel");
 		argon_set_option("msyntax", "intel");
 		argon_set_option("mnaked-reg", NULL);
 		
 		// switch to CODE64 mode
-		//argon_call_pseudo("code64", NULL);
-		argon_call_pseudo("code32", NULL);
+		argon_call_pseudo("code64", NULL);
+		//argon_call_pseudo("code32", NULL);
 	}
 
 	/** set mips defaults **/
@@ -132,21 +132,31 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 		riscv_after_parse_args();
 	}
 
-	md_begin();
+	if(!HAS_FLAG(flags, ARGON_SKIP_INIT)){
+		int fast_init = HAS_FLAG(flags, ARGON_FAST_INIT);
+		if(fast_init){
+			argon_gcl_enable(0);
+		}
+		md_begin();
+		if(fast_init){
+			argon_gcl_enable(1);
+		}
+	}
 
 	return mem;
 }
 
+extern char *argon_strdup(const char *text);
 void argon_assemble(const char *text){
 	/**
 	 * IMPORTANT: md_assemble modifies the input line
 	 * so we must always make a copy 
 	 */
-	char *line = strdup(text);
+	char *line = argon_strdup(text);
 	{
 		// this writes in the current fragment
 		md_assemble(line);
-		free(line);
+		argon_free(line);
 		line = NULL;
 	}
 

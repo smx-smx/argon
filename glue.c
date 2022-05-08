@@ -15,6 +15,8 @@
 
 #include <stdlib.h>
 
+#include "argon.h"
+
 #define CLEAR(x) memset(&x, 0x00, sizeof(x))
 #define CLEAR_SYMBOL(x) memset(&x, 0x00, __argon_get_symbol_size())
 
@@ -46,6 +48,13 @@ void *argon_malloc(size_t sz){
 }
 void argon_free(void *ptr){
 	__real_free(ptr);
+}
+char *argon_strdup(const char *str){
+	int l = strlen(str);
+	char *mem = (char *)argon_malloc(l + 1);
+	memcpy(mem, str, l);
+	mem[l] = '\0';
+	return mem;
 }
 
 void *argon_gczalloc(size_t sz){
@@ -103,11 +112,26 @@ int argon_call_pseudo(const char *op, char *args){
 	return 0;
 }
 
-void _argon_init_gas(){
+extern void argon_gcl_enable(int enable);
+void _argon_init_gas(unsigned flags){
 	symbol_begin();
 	subsegs_begin();
-	// initializes obstacks
-	read_begin();
+	
+	if(!HAS_FLAG(flags, ARGON_SKIP_INIT)){
+		int fast_init = HAS_FLAG(flags, ARGON_FAST_INIT);
+		if(fast_init){
+			argon_gcl_enable(0);
+		}
+		read_begin();
+		if(fast_init){
+			argon_gcl_enable(1);
+		}
+	} else {
+		obstack_free (&notes, NULL);
+		obstack_free (&cond_obstack, NULL);
+		obstack_begin (&notes, chunksize);
+		obstack_begin (&cond_obstack, chunksize);
+	}
 	expr_begin();
 
 #ifdef ABSOLUTE_JUMPS
@@ -155,8 +179,6 @@ void _argon_init_gas(){
 }
 
 
-#define HAS_FLAG(x, f) (( (x) & f) == f)
-
 void argon_reset_gas(unsigned flags){
 	if(stdoutput != NULL){
 		bfd_close(stdoutput);
@@ -164,7 +186,9 @@ void argon_reset_gas(unsigned flags){
 		bfd_cache_close_all();
 	}
 
-	argon_malloc_gc();
+	if(!HAS_FLAG(flags, ARGON_SKIP_GC)){
+		argon_malloc_gc();
+	}
 
 	now_seg = NULL;
 	now_subseg = 0;

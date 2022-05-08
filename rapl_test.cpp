@@ -139,18 +139,17 @@ void* bench(void *arg){
 }
 
 void perf(){
-	long millis = 0;
+	double millis = 0;
 	long opers = 0;
 	for(;;++opers){
 		struct timespec ts = timer_start();
 		{
-			argon_init_gas(0, ARGON_KEEP_BUFFER);
+			argon_init_gas(0, ARGON_KEEP_BUFFER | ARGON_SKIP_INIT);
 			argon_fseek(0, SEEK_SET);
 			argon_assemble("jmp .");
-			argon_reset_gas(ARGON_RESET_FULL);
 		}
 		long diff = timer_end(ts);
-		long diff_millis = diff / 1e6;
+		double diff_millis = diff / 1e6;
 		millis += diff_millis;
 		if(millis >= 1000){
 			fprintf(stderr, "%ld ops/s\n", opers);
@@ -166,8 +165,8 @@ int main(int argc, char *argv[]){
 
 	//launchDebugger();
 
-	setvbuf(stdout, NULL, _IONBF, 0);
-	setvbuf(stderr, NULL, _IONBF, 0);
+	//setvbuf(stdout, NULL, _IONBF, 0);
+	//setvbuf(stderr, NULL, _IONBF, 0);
 
 	//#define LIB_NAME "gas-x86_64-unknown-linux"
 	#define LIB_NAME argv[1]
@@ -185,13 +184,15 @@ int main(int argc, char *argv[]){
 	}
 	#include "binutils_imports.h"
 
-	uint8_t *mem = argon_init_gas(1024 * 1024, ARGON_RESET_FULL);
+	uint8_t *mem = argon_init_gas(1024 * 1024,
+		ARGON_RESET_FULL | ARGON_FAST_INIT);
 
-#if 1
+#if 0
 	char buffer[128] = {0};
 	while(!feof(stdin)){
 		buffer[0] = '\0';
-		argon_init_gas(0, ARGON_KEEP_BUFFER);
+		argon_init_gas(0, ARGON_KEEP_BUFFER | ARGON_SKIP_INIT);
+		argon_fseek(0, SEEK_SET);
 
 		fgets(buffer, sizeof(buffer), stdin);
 		char *p = strrchr(buffer, '\n');
@@ -203,15 +204,15 @@ int main(int argc, char *argv[]){
 		if(!strcmp(buffer, ".quit")){
 			break;
 		}
+		printf("<= %s\n", buffer);
 		argon_assemble(buffer);
-
 		size_t written = argon_bfd_data_written();
 		for(size_t i=0; i<written; i++){
 			printf("%02hhx ", mem[i]);
 		}
 		puts("");
 
-		argon_reset_gas(ARGON_RESET_FULL);
+		memset(mem, 0x00, written);
 	}
 	free(mem);
 

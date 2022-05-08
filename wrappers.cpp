@@ -42,6 +42,8 @@ struct alloc_info make_info(size_t size){
 static std::unordered_set<void *> g_allocations;
 #endif
 
+static std::unordered_set<void *> g_ignores;
+static bool g_is_tracking = true;
 
 extern "C" {
 static uint8_t *bfd_data = nullptr;
@@ -123,11 +125,13 @@ void *__wrap_realloc(void *ptr, size_t size){
 	if(ptr == nullptr){
 		return nullptr;
 	}
+	if(::g_is_tracking){	
 #ifdef DEBUG
-	g_allocations[ptr] = make_info(size);
+		g_allocations[ptr] = make_info(size);
 #else
-	g_allocations.insert(ptr);
+		g_allocations.insert(ptr);
 #endif
+	}
 	
 	return ptr;
 }
@@ -144,11 +148,14 @@ void *__wrap_calloc(size_t nmemb, size_t size){
 	if(ptr == nullptr){
 		return nullptr;
 	}
+
+	if(::g_is_tracking){
 #ifdef DEBUG
-	g_allocations[ptr] = make_info(size);
+		g_allocations[ptr] = make_info(size);
 #else
-	g_allocations.insert(ptr);
+		g_allocations.insert(ptr);
 #endif
+	}
 	
 	return ptr;
 }
@@ -164,11 +171,14 @@ void *__wrap_malloc(size_t size){
 	if(ptr == nullptr){
 		return nullptr;
 	}
+
+	if(::g_is_tracking){
 #ifdef DEBUG
-	g_allocations[ptr] = make_info(size);
+		g_allocations[ptr] = make_info(size);
 #else
-	g_allocations.insert(ptr);
+		g_allocations.insert(ptr);
 #endif
+	}
 	return ptr;
 }
 
@@ -179,10 +189,24 @@ void __wrap_free(void *ptr){
 	}
 }
 
+void argon_gcl_enable(int enable){
+	::g_is_tracking = enable;
+}
+
+void argon_gcl_skip(void *ptr){
+	::g_ignores.insert(ptr);
+}
+
+void argon_gcl_clear(){
+	::g_ignores.clear();
+}
+
 /**
  * @brief Frees all the memory allocations that haven't been freed 
  */
 void argon_malloc_gc(){
+	auto ign_end = g_ignores.end();
+
 	for(auto const& item : g_allocations){
 	#ifdef DEBUG
 		void *ptr = item.first;
@@ -193,7 +217,9 @@ void argon_malloc_gc(){
 	#else
 		void *ptr = item;
 	#endif
-		__real_free(ptr);
+		//if(::g_ignores.find(ptr) == ign_end){
+			__real_free(ptr);
+		//}
 	}
 	g_allocations.clear();
 }
