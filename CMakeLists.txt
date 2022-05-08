@@ -127,7 +127,8 @@ add_dependencies(binutils_glue build_gas)
 
 set(OPCODES_OBJECTS opcodes/*.o)
 
-if("${TARGET}" MATCHES "avr-.*")
+if("${TARGET}" MATCHES "avr-.*"
+OR "${TARGET}" MATCHES "sh4-.*")
 	set(OPCODES_OBJECTS "")
 endif()
 
