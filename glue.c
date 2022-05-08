@@ -18,6 +18,15 @@
 #include "argon.h"
 #include "argon_api.h"
 
+#ifdef WIN32
+// libiberty requires this for some odd reasons
+int fork (void){
+	fputs("fork() not supported on Windows\n", stderr);
+	fflush(stderr);
+	abort();
+}
+#endif
+
 #define CLEAR(x) memset(&x, 0x00, sizeof(x))
 #define CLEAR_SYMBOL(x) memset(&x, 0x00, __argon_get_symbol_size())
 

@@ -25,6 +25,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 #add_compile_options(-Wall)
+if(WIN32)
+	add_compile_options(-Wl,--export-all-symbols)
+endif()
 
 set(BINUTILS_CFLAGS
 	-fPIC
@@ -47,7 +50,7 @@ shared_lib_name(gas GAS_SHARED_LIB_NAME)
 
 if(NOT DEFINED HOST)
 	execute_process(
-		COMMAND cc -dumpmachine
+		COMMAND ${CMAKE_C_COMPILER} -dumpmachine
 		OUTPUT_VARIABLE HOST
 		OUTPUT_STRIP_TRAILING_WHITESPACE
 	)
@@ -59,7 +62,10 @@ endif()
 add_custom_command(
 	OUTPUT ${binutils_BINARY_DIR}/config.status
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
-	COMMAND ${CMAKE_COMMAND} -E env CC="${CMAKE_SOURCE_DIR}/cc_wrap" CFLAGS="${BINUTILS_CFLAGS}"
+	COMMAND ${CMAKE_COMMAND} -E env 
+		REAL_CC="${CMAKE_C_COMPILER}"
+		CC="${CMAKE_SOURCE_DIR}/cc_wrap"
+		CFLAGS="${BINUTILS_CFLAGS}"
 		${binutils_SOURCE_DIR}/configure 
 		--disable-nls
 		--prefix=${binutils_BINARY_DIR}
@@ -77,7 +83,10 @@ add_custom_target(configure_binutils
 ## build gas objects
 add_custom_target(build_gas
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
-	COMMAND ${CMAKE_COMMAND} -E env MAKEINFO=true make -j${NPROC} all-gas
+	COMMAND ${CMAKE_COMMAND} -E env
+	REAL_CC="${CMAKE_C_COMPILER}"
+	MAKEINFO=true
+	make -j${NPROC} all-gas
 	COMMAND make install-gas
 	COMMENT "make install-gas"
 )
@@ -86,7 +95,10 @@ add_dependencies(build_gas configure_binutils)
 ## build opcodes objects and libopcodes
 add_custom_target(build_opcodes
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
-	COMMAND ${CMAKE_COMMAND} -E env MAKEINFO=true make -j${NPROC} all-opcodes
+	COMMAND ${CMAKE_COMMAND} -E env
+	REAL_CC="${CMAKE_C_COMPILER}"
+	MAKEINFO=true
+	make -j${NPROC} all-opcodes
 	COMMAND make install-opcodes
 	COMMENT "make install-opcodes"
 )
@@ -132,6 +144,13 @@ OR "${TARGET}" MATCHES "sh4-.*")
 	set(OPCODES_OBJECTS "")
 endif()
 
+set(LIBGAS_LDFLAGS "")
+list(APPEND LIBGAS_LDFLAGS -lstdc++)
+if(WIN32)
+	# bigger binary, but self contained (libstdc++ and libgcc)
+	list(APPEND LIBGAS_LDFLAGS -static)
+endif()
+
 ## build libgas shared library
 add_custom_target(build_gas_shared
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
@@ -161,7 +180,7 @@ add_custom_target(build_gas_shared
 		bfd/*.o
 		libiberty/*.o
 		zlib/*.o
-		-lstdc++
+		${LIBGAS_LDFLAGS}
 		-o gas/${GAS_SHARED_LIB_NAME}
 )
 add_dependencies(build_gas_shared build_gas)
@@ -186,5 +205,12 @@ add_custom_target(copy_libgas
 add_dependencies(copy_libgas build_gas_shared)
 
 add_executable(rapl_test rapl_test.cpp)
-target_link_libraries(rapl_test PRIVATE dl)
+if(UNIX AND NOT CYGWIN)
+	target_link_libraries(rapl_test PRIVATE dl)
+endif()
+if(WIN32)
+	# only required for the clock_gettime perf test
+	# target_link_libraries(rapl_test PRIVATE pthread)
+	target_compile_options(rapl_test PRIVATE -static)
+endif()
 add_dependencies(rapl_test copy_libgas)

@@ -48,6 +48,58 @@ static pool_t init_pool;
 static pool_t live_pool;
 static int g_pool_selector = ARGON_POOL_LIVE;
 
+static thread_local bool in_malloc = false;
+
+extern "C" {
+
+static void *hooked_calloc(size_t nmemb, size_t size);
+static void *hooked_realloc(void *ptr, size_t size);
+static void *hooked_malloc(size_t size);
+static void hooked_free(void *ptr);
+
+extern void *__real_malloc(size_t size);
+extern void __real_free(void *ptr);
+extern void *__real_calloc(size_t nmemb, size_t size);
+extern void *__real_realloc(void *ptr, size_t size);
+
+static void *(*pfn_malloc)(size_t size) = &__real_malloc;
+static void (*pfn_free)(void *ptr) = &__real_free;
+static void *(*pfn_calloc)(size_t nmemb, size_t size) = &__real_calloc;
+static void *(*pfn_realloc)(void *ptr, size_t size) = &__real_realloc;
+
+int __argon_tls_init(){
+	// make sure the TLS variable is initialized by accessing it
+	::in_malloc = false;
+	return ::in_malloc;
+}
+
+void argon_gc_enable(int enable){
+	if(enable){
+		pfn_malloc = &hooked_malloc;
+		pfn_free = &hooked_free;
+		pfn_calloc = &hooked_calloc;
+		pfn_realloc = &hooked_realloc;
+	} else {
+		pfn_malloc = &__real_malloc;
+		pfn_free = &__real_free;
+		pfn_calloc = &__real_calloc;
+		pfn_realloc = &__real_realloc;
+	}
+}
+
+void *__wrap_realloc(void *ptr, size_t size){
+	return pfn_realloc(ptr, size);
+}
+void *__wrap_calloc(size_t nmemb, size_t size){
+	return pfn_calloc(nmemb, size);
+}
+void *__wrap_malloc(size_t size){
+	return pfn_malloc(size);
+}
+void __wrap_free(void *ptr){
+	return pfn_free(ptr);
+}
+
 static inline __attribute__((always_inline)) 
 pool_t& pool_get(){
 	switch(::g_pool_selector){
@@ -74,7 +126,6 @@ void pool_remove(void *ptr){
 	pool.erase(ptr);
 }
 
-extern "C" {
 static uint8_t *bfd_data = nullptr;
 static size_t bfd_data_size = 0;
 static size_t bfd_data_count = 0;
@@ -131,16 +182,6 @@ bool __wrap__bfd_elf_set_section_contents (
 	return true;
 }
 
-extern void *__real_malloc(size_t size);
-extern void __real_free(void *ptr);
-extern void *__real_calloc(size_t nmemb, size_t size);
-extern void *__real_realloc(void *ptr, size_t size);
-
-void *__wrap_malloc(size_t size);
-void __wrap_free(void *ptr);
-void *__wrap_calloc(size_t nmemb, size_t size);
-void *__wrap_realloc(void *ptr, size_t size);
-
 /**
  * @brief Wrapper of realloc that stores succesful re-allocations
  * 
@@ -148,15 +189,23 @@ void *__wrap_realloc(void *ptr, size_t size);
  * @param size 
  * @return void* 
  */
-void *__wrap_realloc(void *ptr, size_t size){
-	pool_remove(ptr);
+static void *hooked_realloc(void *ptr, size_t size){
+	bool track = !::in_malloc;
+	if(track){
+		::in_malloc = true;
+		pool_remove(ptr);
+	}
 	ptr = __real_realloc(ptr, size);
 	if(ptr == nullptr){
 		return nullptr;
 	}
-	pool_insert(ptr, size);
+	if(track){
+		pool_insert(ptr, size);
+		::in_malloc = false;
+	}
 	return ptr;
 }
+
 
 /**
  * @brief Wrapper of calloc that stores succesful allocations
@@ -165,13 +214,18 @@ void *__wrap_realloc(void *ptr, size_t size){
  * @param size 
  * @return void* 
  */
-void *__wrap_calloc(size_t nmemb, size_t size){
+static void *hooked_calloc(size_t nmemb, size_t size){
 	void *ptr = __real_calloc(nmemb, size);
 	if(ptr == nullptr){
 		return nullptr;
 	}
 
-	pool_insert(ptr, size);
+	bool track = !::in_malloc;
+	if(track){
+		::in_malloc = true;
+		pool_insert(ptr, size);
+		::in_malloc = false;
+	}
 	return ptr;
 }
 
@@ -181,20 +235,32 @@ void *__wrap_calloc(size_t nmemb, size_t size){
  * @param size 
  * @return void* 
  */
-void *__wrap_malloc(size_t size){
+static void *hooked_malloc(size_t size){
 	void *ptr = __real_malloc(size);
 	if(ptr == nullptr){
 		return nullptr;
 	}
 
-	pool_insert(ptr, size);
+	bool track = !::in_malloc;
+	if(track){
+		::in_malloc = true;
+		pool_insert(ptr, size);
+		::in_malloc = false;
+	}
 	return ptr;
 }
 
-void __wrap_free(void *ptr){
-	pool_t& pool = pool_get();
-	if(pool.find(ptr) != pool.end()){
-		pool.erase(ptr);
+static void hooked_free(void *ptr){
+	bool track = !::in_malloc;
+	if(track){
+		::in_malloc = true;
+		pool_t& pool = pool_get();
+		if(pool.find(ptr) != pool.end()){
+			pool.erase(ptr);
+			__real_free(ptr);
+		}
+		::in_malloc = false;
+	} else {
 		__real_free(ptr);
 	}
 }

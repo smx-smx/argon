@@ -17,6 +17,7 @@ void argon_reset_gas(unsigned flags);
 int argon_set_option(const char *optname, const char *value);
 int argon_call_pseudo(const char *op, char *args);
 void argon_gcpool_set(int pool_selector);
+void argon_gc_enable(int enable);
 
 /** wrappers for the real allocator **/
 void *argon_malloc(size_t sz);

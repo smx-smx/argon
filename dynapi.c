@@ -40,16 +40,34 @@
 #define GFUNC(ret_type, function, ...) ret_type(*function)(__VA_ARGS__) = resolveSymbol(#function)
 #endif
 
+static void *resolveSymbol(const char *sym);
+
 #ifdef WIN32
 static HMODULE gas;
+
 BOOL WINAPI DllMain(
     HINSTANCE hinstDLL,
     DWORD fdwReason,   
     LPVOID lpReserved )
 {
-    switch( fdwReason ) { 
+switch( fdwReason ) { 
         case DLL_PROCESS_ATTACH:
 			gas = hinstDLL;
+			GFUNC(int, __argon_tls_init);
+			/**
+			 * https://github.com/msys2/MINGW-packages/issues/2519
+			 * 
+			 * At the very first access of a thread-local object in a new program,
+			 * emutls_init is called via __emutls_get_address.
+			 * This function allocates some memory for the storage using malloc (see emutls_alloc),
+			 * and registers emutls_destroy to be executed at thread exit, using __gthread_key_create.
+			 **/
+			__argon_tls_init();
+			/**
+			 * now that ctors and TLS have been taken care of,
+			 * we can enable GC malloc
+			 **/
+			argon_gc_enable(1);
             break;
         case DLL_THREAD_ATTACH:
             break;
@@ -101,7 +119,6 @@ static int argon_arch_detect(){
 }
 
 uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
-
 	argon_reset_gas(flags);
 
 	uint8_t *mem = NULL;
@@ -123,7 +140,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 	if(!HAS_FLAG(flags, ARGON_SKIP_INIT)){
 	int arch = argon_arch_detect();
 		switch(arch){
-			case ARCH_I386:
+			case ARCH_I386:;
 				argon_set_option("64", NULL);
 				//argon_set_option("march", "generic64");
 				argon_set_option("mmnemonic", "intel");
@@ -134,7 +151,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 				argon_call_pseudo("code64", NULL);
 				//argon_call_pseudo("code32", NULL);
 				break;
-			case ARCH_MIPS:
+			case ARCH_MIPS:;
 				argon_set_option("mips5", NULL);
 				argon_set_option("mips32", NULL);
 
@@ -142,7 +159,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 				GVAR(int *, mips_flag_mdebug);
 				*mips_flag_mdebug = 0;
 				break;
-			case ARCH_PPC:
+			case ARCH_PPC:;
 				// NOTE: requires patch
 				GVAR(htab_t *, ppc_hash);
 				GVAR(htab_t *, ppc_macro_hash);
@@ -155,7 +172,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 					memset(ppc_macro_hash, 0x00, sizeof(*ppc_macro_hash));
 				}
 				break;
-			case ARCH_RISCV:
+			case ARCH_RISCV:;
 				GFUNC(void, riscv_after_parse_args);
 				GFUNC(void, riscv_pop_insert);
 
@@ -168,7 +185,7 @@ uint8_t *argon_init_gas(size_t bufferSize, unsigned flags){
 				// inits riscv_subsets
 				riscv_after_parse_args();
 				break;
-			case ARCH_Z80:
+			case ARCH_Z80:;
 				// enable all instructions
 				// $FIXME: some instructions (e.g. dec) complain about illegal operand
 				argon_set_option("full", NULL);

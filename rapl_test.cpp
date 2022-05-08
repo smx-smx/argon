@@ -20,6 +20,10 @@
 #include <string.h>
 #include <fcntl.h>
 
+#ifdef PERF
+#include <time.h>
+#endif
+
 #ifdef WIN32
 #include <windows.h>
 #else
@@ -27,34 +31,21 @@
 #endif
 
 #include "argon.h"
+#include "support.h"
 
 #define UNUSED(x) ((void)(x))
 
-#ifdef WIN32
-static HMODULE gas;
-#else
-static void *gas;
-#endif
+libhandle_t gas = (libhandle_t)0;
 
 #ifdef __cplusplus
 template<typename T>
 static void resolveSymbol(const char *sym, T& outSym){
-	void *psym = NULL;
-#ifdef WIN32
-	psym = (void *)GetProcAddress(gas, sym);
-#else
-	psym = dlsym(gas, sym);
-#endif
-
+	void *psym = LIB_GETSYM(gas, sym);
 	outSym = reinterpret_cast<T>(psym);
 }
 #else
 static void *resolveSymbol(const char *sym){
-#ifdef WIN32
-	return (void *)GetProcAddress(gas, sym);
-#else
-	return dlsym(gas, sym);
-#endif
+	return LIB_GETSYM(gas, sym);
 }
 #endif
 
@@ -134,10 +125,7 @@ static inline long timer_end(struct timespec start_time){
     return diffInNanos;
 }
 
-void* bench(void *arg){
-	return NULL;
-}
-
+#ifdef PERF
 void perf(){
 	double millis = 0;
 	long opers = 0;
@@ -158,6 +146,7 @@ void perf(){
 		}
 	}
 }
+#endif
 
 int main(int argc, char *argv[]){
 	UNUSED(argc);
@@ -168,18 +157,9 @@ int main(int argc, char *argv[]){
 	//setvbuf(stdout, NULL, _IONBF, 0);
 	//setvbuf(stderr, NULL, _IONBF, 0);
 
-	//#define LIB_NAME "gas-x86_64-unknown-linux"
-	#define LIB_NAME argv[1]
-
-#ifdef WIN32
-	gas = LoadLibraryA(LIB_NAME);
-#else
-	gas = dlopen(LIB_NAME, RTLD_NOW);
-#endif
-
+	gas = LIB_OPEN(argv[1]);
 	if(gas == NULL){
-		fprintf(stderr, "LoadLibraryA failed\n");
-		fprintf(stderr, "%s\n", dlerror());
+		LIB_PERROR(stderr);
 		return 1;
 	}
 	#include "binutils_imports.h"
@@ -187,7 +167,9 @@ int main(int argc, char *argv[]){
 	uint8_t *mem = argon_init_gas(1024 * 1024,
 		ARGON_RESET_FULL | ARGON_FAST_INIT);
 
-#if 1
+#ifdef PERF
+	perf();
+#else
 	char buffer[128] = {0};
 	while(!feof(stdin)){
 		buffer[0] = '\0';
@@ -214,17 +196,11 @@ int main(int argc, char *argv[]){
 
 		memset(mem, 0x00, written);
 	}
-#else
-	perf();
 #endif
 
 	free(mem);
 	argon_reset_gas(ARGON_RESET_FULL);
 
-#ifdef WIN32
-	FreeLibrary(gas);
-#else
-	dlclose(gas);
-#endif
+	LIB_CLOSE(gas);
 	return 0;
 }

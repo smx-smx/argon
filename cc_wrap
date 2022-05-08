@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-CC=gcc
-
 patch_remove_static(){
 	local symbol="$1"
 	echo -ne "s/static(.*${symbol})/\$1/g"
@@ -11,7 +9,7 @@ if [[ "$@" == *"gas/symbols.c" ]]; then
 	# exclude last argument
 	args="${@:1:$(($#-1))}"
 
-	exec ${CC} ${args} -x c - < <(
+	exec ${REAL_CC} ${args} -x c - < <(
 		echo "# 1 \"${file_path}\""
 		cat "${file_path}"
 		cat <<-EOF
@@ -26,7 +24,7 @@ elif [[ "$@" == *"gas/read.c" ]]; then
 	# exclude last argument
 	args="${@:1:$(($#-1))}"
 
-	exec ${CC} ${args} -x c - < <(
+	exec ${REAL_CC} ${args} -x c - < <(
 		echo "# 1 \"${file_path}\""
 		p="$(patch_remove_static "po_hash")"
 		cat "${file_path}" | perl -pe "${p}"
@@ -36,7 +34,7 @@ elif [[ "$@" == *"gas/config/tc-riscv.c" ]]; then
 	# exclude last argument
 	args="${@:1:$(($#-1))}"
 
-	exec ${CC} ${args} -x c - < <(
+	exec ${REAL_CC} ${args} -x c - < <(
 		echo "# 1 \"${file_path}\""
 		p="$(patch_remove_static "riscv_subsets")"
 		cat "${file_path}" | perl -pe "${p}"
@@ -46,12 +44,12 @@ elif [[ "$@" == *"gas/config/tc-ppc.c" ]]; then
 	# exclude last argument
 	args="${@:1:$(($#-1))}"
 
-	exec ${CC} ${args} -x c - < <(
+	exec ${REAL_CC} ${args} -x c - < <(
 		echo "# 1 \"${file_path}\""
 		p="$(patch_remove_static "ppc_hash")"
 		p="${p};$(patch_remove_static "ppc_macro_hash")"
 		cat "${file_path}" | perl -pe "${p}"
 	)
 else
-	exec ${CC} "$@"
+	exec ${REAL_CC} "$@"
 fi
