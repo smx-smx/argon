@@ -210,7 +210,7 @@ if(UNIX AND NOT CYGWIN)
 endif()
 if(WIN32)
 	# only required for the clock_gettime perf test
-	# target_link_libraries(rapl_test PRIVATE pthread)
+	#target_link_libraries(rapl_test PRIVATE pthread)
 	target_compile_options(rapl_test PRIVATE -static)
 endif()
 add_dependencies(rapl_test copy_libgas)

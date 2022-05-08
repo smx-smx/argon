@@ -20,6 +20,7 @@
 #include <string.h>
 #include <fcntl.h>
 
+//#define PERF
 #ifdef PERF
 #include <time.h>
 #endif

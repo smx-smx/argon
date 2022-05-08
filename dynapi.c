@@ -42,6 +42,8 @@
 
 static void *resolveSymbol(const char *sym);
 
+extern int __argon_tls_init();
+
 #ifdef WIN32
 static HMODULE gas;
 
@@ -52,8 +54,8 @@ BOOL WINAPI DllMain(
 {
 switch( fdwReason ) { 
         case DLL_PROCESS_ATTACH:
+			// store the DLL handle for dynamic symbol lookup
 			gas = hinstDLL;
-			GFUNC(int, __argon_tls_init);
 			/**
 			 * https://github.com/msys2/MINGW-packages/issues/2519
 			 * 
@@ -77,6 +79,11 @@ switch( fdwReason ) {
             break;
     }
     return TRUE;  // Successful DLL_PROCESS_ATTACH.
+}
+#else
+void __attribute__((constructor)) ctor(){
+	__argon_tls_init();
+	argon_gc_enable(1);
 }
 #endif
 
