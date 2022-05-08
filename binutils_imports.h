@@ -35,9 +35,6 @@ GFUNC(void, write_object_file);
 GFUNC(void *, argon_bfd_data_alloc, size_t);
 GFUNC(size_t, argon_bfd_data_written);
 GFUNC(void *, argon_tc_pseudo_ops);
-GFUNC(void, argon_gcl_skip, void *ptr);
-GFUNC(void, argon_gcl_clear);
-GFUNC(void, argon_gcl_enable, int enable);
 
 /** globals **/
 GVAR(void **, stdoutput);

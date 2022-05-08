@@ -17,6 +17,8 @@
 #include <cstring>
 #include <algorithm>
 
+#include "argon.h"
+
 //#define DEBUG
 #ifdef DEBUG
 #include <unordered_map>
@@ -24,7 +26,7 @@ struct alloc_info {
 	std::vector<void *> bt;
 	size_t size;
 };
-static std::unordered_map<void *, alloc_info> g_allocations;
+using pool_t = std::unordered_set<void *, alloc_info>;
 
 static inline __attribute__((always_inline))
 struct alloc_info make_info(size_t size){
@@ -39,11 +41,38 @@ struct alloc_info make_info(size_t size){
 }
 #else
 #include <unordered_set>
-static std::unordered_set<void *> g_allocations;
+using pool_t = std::unordered_set<void *>;
 #endif
 
-static std::unordered_set<void *> g_ignores;
-static bool g_is_tracking = true;
+static pool_t init_pool;
+static pool_t live_pool;
+static int g_pool_selector = ARGON_POOL_LIVE;
+
+static inline __attribute__((always_inline)) 
+pool_t& pool_get(){
+	switch(::g_pool_selector){
+		case ARGON_POOL_INIT: return init_pool;
+		case ARGON_POOL_LIVE:
+		default:
+			return live_pool;
+	}
+}
+
+static inline __attribute__((always_inline)) 
+void pool_insert(void *ptr, size_t size){
+	pool_t& pool = pool_get();
+#ifdef DEBUG
+	pool[ptr] = make_info(size);
+#else
+	pool.insert(ptr);
+#endif
+}
+
+static inline __attribute__((always_inline)) 
+void pool_remove(void *ptr){
+	static pool_t& pool = pool_get();
+	pool.erase(ptr);
+}
 
 extern "C" {
 static uint8_t *bfd_data = nullptr;
@@ -120,19 +149,12 @@ void *__wrap_realloc(void *ptr, size_t size);
  * @return void* 
  */
 void *__wrap_realloc(void *ptr, size_t size){
-	g_allocations.erase(ptr);
+	pool_remove(ptr);
 	ptr = __real_realloc(ptr, size);
 	if(ptr == nullptr){
 		return nullptr;
 	}
-	if(::g_is_tracking){	
-#ifdef DEBUG
-		g_allocations[ptr] = make_info(size);
-#else
-		g_allocations.insert(ptr);
-#endif
-	}
-	
+	pool_insert(ptr, size);
 	return ptr;
 }
 
@@ -149,14 +171,7 @@ void *__wrap_calloc(size_t nmemb, size_t size){
 		return nullptr;
 	}
 
-	if(::g_is_tracking){
-#ifdef DEBUG
-		g_allocations[ptr] = make_info(size);
-#else
-		g_allocations.insert(ptr);
-#endif
-	}
-	
+	pool_insert(ptr, size);
 	return ptr;
 }
 
@@ -172,42 +187,24 @@ void *__wrap_malloc(size_t size){
 		return nullptr;
 	}
 
-	if(::g_is_tracking){
-#ifdef DEBUG
-		g_allocations[ptr] = make_info(size);
-#else
-		g_allocations.insert(ptr);
-#endif
-	}
+	pool_insert(ptr, size);
 	return ptr;
 }
 
 void __wrap_free(void *ptr){
-	if(g_allocations.find(ptr) != g_allocations.end()){
-		g_allocations.erase(ptr);
+	pool_t& pool = pool_get();
+	if(pool.find(ptr) != pool.end()){
+		pool.erase(ptr);
 		__real_free(ptr);
 	}
 }
 
-void argon_gcl_enable(int enable){
-	::g_is_tracking = enable;
+void argon_gcpool_set(int pool_selector){
+	::g_pool_selector = pool_selector;
 }
 
-void argon_gcl_skip(void *ptr){
-	::g_ignores.insert(ptr);
-}
-
-void argon_gcl_clear(){
-	::g_ignores.clear();
-}
-
-/**
- * @brief Frees all the memory allocations that haven't been freed 
- */
-void argon_malloc_gc(){
-	auto ign_end = g_ignores.end();
-
-	for(auto const& item : g_allocations){
+static void pool_clear(pool_t &pool){
+	for(auto const& item : pool){
 	#ifdef DEBUG
 		void *ptr = item.first;
 		struct alloc_info caller = item.second;
@@ -217,11 +214,26 @@ void argon_malloc_gc(){
 	#else
 		void *ptr = item;
 	#endif
-		//if(::g_ignores.find(ptr) == ign_end){
-			__real_free(ptr);
-		//}
+		__real_free(ptr);
 	}
-	g_allocations.clear();
+	pool.clear();
+}
+
+/**
+ * @brief Frees all the memory allocations that haven't been freed 
+ */
+void argon_malloc_gc(int pool_selector){
+	if(HAS_FLAG(pool_selector, ARGON_POOL_LIVE)){
+		pool_clear(live_pool);
+	}
+	if(HAS_FLAG(pool_selector, ARGON_POOL_INIT)){
+		pool_clear(init_pool);
+	}
+	/*
+	printf("init_pool: %d, live_pool: %d\n",
+		init_pool.size(),
+		live_pool.size());
+	*/
 }
 
 void *argon_bfd_data_alloc(size_t size){

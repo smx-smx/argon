@@ -187,7 +187,7 @@ int main(int argc, char *argv[]){
 	uint8_t *mem = argon_init_gas(1024 * 1024,
 		ARGON_RESET_FULL | ARGON_FAST_INIT);
 
-#if 1
+#if 0
 	char buffer[128] = {0};
 	while(!feof(stdin)){
 		buffer[0] = '\0';
@@ -214,11 +214,12 @@ int main(int argc, char *argv[]){
 
 		memset(mem, 0x00, written);
 	}
-	free(mem);
-
 #else
 	perf();
 #endif
+
+	free(mem);
+	argon_reset_gas(ARGON_RESET_FULL);
 
 #ifdef WIN32
 	FreeLibrary(gas);

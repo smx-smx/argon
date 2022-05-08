@@ -16,6 +16,7 @@
 #include <stdlib.h>
 
 #include "argon.h"
+#include "argon_api.h"
 
 #define CLEAR(x) memset(&x, 0x00, sizeof(x))
 #define CLEAR_SYMBOL(x) memset(&x, 0x00, __argon_get_symbol_size())
@@ -49,6 +50,7 @@ void *argon_malloc(size_t sz){
 void argon_free(void *ptr){
 	__real_free(ptr);
 }
+
 char *argon_strdup(const char *str){
 	int l = strlen(str);
 	char *mem = (char *)argon_malloc(l + 1);
@@ -64,10 +66,6 @@ void *argon_gczalloc(size_t sz){
 	}
 	memset(mem, 0x00, sz);
 	return mem;
-}
-
-void argon_clear_htab(htab_t *htab){
-	memset(htab, 0x00, sizeof(*htab));
 }
 
 extern struct htab *po_hash;
@@ -112,7 +110,6 @@ int argon_call_pseudo(const char *op, char *args){
 	return 0;
 }
 
-extern void argon_gcl_enable(int enable);
 void _argon_init_gas(unsigned flags){
 	symbol_begin();
 	subsegs_begin();
@@ -120,11 +117,11 @@ void _argon_init_gas(unsigned flags){
 	if(!HAS_FLAG(flags, ARGON_SKIP_INIT)){
 		int fast_init = HAS_FLAG(flags, ARGON_FAST_INIT);
 		if(fast_init){
-			argon_gcl_enable(0);
+			argon_gcpool_set(ARGON_POOL_INIT);
 		}
 		read_begin();
 		if(fast_init){
-			argon_gcl_enable(1);
+			argon_gcpool_set(ARGON_POOL_LIVE);
 		}
 	} else {
 		obstack_free (&notes, NULL);
@@ -178,7 +175,6 @@ void _argon_init_gas(unsigned flags){
 	fake_line_buffer = argon_gczalloc(32);
 }
 
-
 void argon_reset_gas(unsigned flags){
 	if(stdoutput != NULL){
 		bfd_close(stdoutput);
@@ -186,8 +182,12 @@ void argon_reset_gas(unsigned flags){
 		bfd_cache_close_all();
 	}
 
-	if(!HAS_FLAG(flags, ARGON_SKIP_GC)){
-		argon_malloc_gc();
+	if(!HAS_FLAG(flags, ARGON_SKIP_GC)){	
+		int pools_to_clear = ARGON_POOL_LIVE;
+		if(HAS_FLAG(flags, ARGON_RESET_FULL)){
+			pools_to_clear |= ARGON_POOL_INIT;
+		}
+		argon_malloc_gc(pools_to_clear);
 	}
 
 	now_seg = NULL;
@@ -195,11 +195,9 @@ void argon_reset_gas(unsigned flags){
 	frchain_now = NULL;
 	frag_now = NULL;
 
-	text_section = NULL;
 	reg_section = NULL;
 	expr_section = NULL;
 
-	stdoutput = NULL;
 	symbol_table_frozen = 0;
 	finalize_syms = 0;
 
