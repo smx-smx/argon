@@ -68,6 +68,15 @@ list(APPEND AUTOTOOLS_ENV
 	MAKEINFO=true
 )
 
+# make clean will delete the bindir. recreate it
+add_custom_command(
+	OUTPUT ${binutils_BINARY_DIR}
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${binutils_BINARY_DIR}
+)
+add_custom_target(mkdir_binutils
+	DEPENDS ${binutils_BINARY_DIR}
+)
+
 add_custom_command(
 	OUTPUT ${binutils_BINARY_DIR}/config.status
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
@@ -86,6 +95,11 @@ add_custom_target(configure_binutils
 	DEPENDS ${binutils_BINARY_DIR}/config.status
 	COMMENT "configuring binutils"
 )
+set_target_properties(configure_binutils
+	PROPERTIES
+	ADDITIONAL_CLEAN_FILES ${binutils_BINARY_DIR}
+)
+add_dependencies(configure_binutils mkdir_binutils)
 
 ## build gas objects
 add_custom_target(build_gas
@@ -160,7 +174,8 @@ endif()
 add_custom_target(build_gas_shared
 	WORKING_DIRECTORY ${binutils_BINARY_DIR}
 	COMMAND_EXPAND_LISTS
-	COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS}
+	COMMAND ${CMAKE_C_COMPILER}
+		${BINUTILS_CFLAGS}
 		-shared
 		# GC malloc hooks
 		-Wl,--wrap=malloc
