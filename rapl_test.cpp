@@ -151,8 +151,13 @@ void perf(){
 #endif
 
 int main(int argc, char *argv[]){
-	UNUSED(argc);
 	UNUSED(argv);
+
+	if(argc < 2){
+		fprintf(stderr, "Usage: %s ./libgas.so\n", argv[0]);
+		return EXIT_FAILURE;
+	}
+
 
 	//launchDebugger();
 
